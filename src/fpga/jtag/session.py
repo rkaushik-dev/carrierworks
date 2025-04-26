@@ -29,13 +29,6 @@ from fpga.measure import Frequency
 __all__ = ["ScanSession"]
 
 
-def _tms_vector(bits: tuple[int, ...] | list[int]) -> BitVector:
-    value = 0
-    for index, bit in enumerate(bits):
-        value |= bit << index
-    return BitVector(value, len(bits))
-
-
 class ScanSession:
     """A live conversation with a chain."""
 
@@ -80,7 +73,7 @@ class ScanSession:
     def move_to(self, state: str) -> None:
         path = path_between(self.state, state)
         if path:
-            self._pulse(_tms_vector(path), BitVector.zeros(len(path)))
+            self._pulse(BitVector.from_bits(path), BitVector.zeros(len(path)))
         self.state = state
 
     def run_test_idle(self, clocks: int) -> None:
@@ -96,7 +89,7 @@ class ScanSession:
             raise ValidationError("nothing to shift", field="payload")
         self.move_to(state)
         length = len(payload)
-        tms = _tms_vector([0] * (length - 1) + [1])
+        tms = BitVector.from_bits([0] * (length - 1) + [1])
         captured = self._pulse(tms, payload)
         self.state = "exit1_ir" if state == "shift_ir" else "exit1_dr"
         self.move_to("run_test_idle")

@@ -13,6 +13,7 @@ which end it starts from in its name.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from fpga.errors import ValidationError
@@ -60,6 +61,28 @@ class BitVector:
         return cls(int(cleaned, 2), len(cleaned))
 
     @classmethod
+    def from_bits(cls, bits: Iterable[int]) -> BitVector:
+        """From bits in clock order, the first one out first."""
+        value = 0
+        length = 0
+        for bit in bits:
+            if bit not in (0, 1):
+                raise ValidationError("a vector is made of ones and zeros", field="bits")
+            value |= bit << length
+            length += 1
+        return cls(value, length)
+
+    @classmethod
+    def join(cls, parts: Iterable[BitVector]) -> BitVector:
+        """Lay vectors end to end in shift order, first argument out first."""
+        value = 0
+        length = 0
+        for part in parts:
+            value |= part.value << length
+            length += part.length
+        return cls(value, length)
+
+    @classmethod
     def from_bytes(cls, data: bytes, length: int | None = None) -> BitVector:
         """From a driver buffer, first byte lowest, bit zero of it first."""
         width = len(data) * 8 if length is None else length
@@ -93,6 +116,30 @@ class BitVector:
         if length == 0:
             return BitVector(0, 0)
         return BitVector((self.value >> start) & ((1 << length) - 1), length)
+
+    def bits(self) -> tuple[int, ...]:
+        """Every bit in clock order, which is what a driver loop wants."""
+        return tuple((self.value >> index) & 1 for index in range(self.length))
+
+    def split(self, widths: Iterable[int]) -> tuple[BitVector, ...]:
+        """Cut into consecutive runs from the shifting end.
+
+        The widths have to add up to the whole vector. A chain register that
+        does not add up is a bug in whoever built it, not something to pad.
+        """
+        pieces = []
+        offset = 0
+        for width in widths:
+            pieces.append(self.slice(offset, width))
+            offset += width
+        if offset != self.length:
+            raise ValidationError(
+                "widths do not add up to the vector",
+                field="widths",
+                covered=offset,
+                length=self.length,
+            )
+        return tuple(pieces)
 
     def reversed(self) -> BitVector:
         """The same bits, other way round, for the registers that want it."""

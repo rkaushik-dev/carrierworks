@@ -14,11 +14,7 @@ KINTEX = 0x03651093
 
 
 def vec(bits):
-    """A bit vector from clock order, first clock first."""
-    value = 0
-    for index, bit in enumerate(bits):
-        value |= bit << index
-    return BitVector(value, len(bits))
+    return BitVector.from_bits(bits)
 
 
 def travel(sim, target):

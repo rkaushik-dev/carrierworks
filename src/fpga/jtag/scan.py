@@ -81,11 +81,10 @@ def ir_scan(chain: ScanChain, instructions: dict[str, str] | None = None) -> Bit
     unknown = set(wanted) - set(chain.labels())
     if unknown:
         raise NotFound("tap", ", ".join(sorted(unknown)))
-    vector = BitVector(0, 0)
-    for tap in chain.in_tdo_order():
-        name = wanted.get(tap.label, "bypass")
-        vector = vector + instruction_code(name, tap.ir_length)
-    return vector
+    return BitVector.join(
+        instruction_code(wanted.get(tap.label, "bypass"), tap.ir_length)
+        for tap in chain.in_tdo_order()
+    )
 
 
 def dr_capture_offset(chain: ScanChain, label: str) -> int:
@@ -100,9 +99,13 @@ def dr_scan(chain: ScanChain, label: str, payload: BitVector) -> BitVector:
     is the payload with one bit per device on either side of it.
     """
     index = chain.index_of(label)
-    leading = BitVector.zeros(chain.devices_before_tdo(index))
-    trailing = BitVector.zeros(chain.devices_after_tdo(index))
-    return leading + payload + trailing
+    return BitVector.join(
+        (
+            BitVector.zeros(chain.devices_before_tdo(index)),
+            payload,
+            BitVector.zeros(chain.devices_after_tdo(index)),
+        )
+    )
 
 
 def take_dr_payload(chain: ScanChain, label: str, captured: BitVector, length: int) -> BitVector:

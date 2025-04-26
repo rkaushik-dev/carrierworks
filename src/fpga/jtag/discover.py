@@ -136,10 +136,10 @@ def scan_bits_for(chain: ScanChain) -> BitVector:
     Used by the fake adapter and by the tests, and it is the only honest way
     to check the reader without a board on the bench.
     """
-    vector = BitVector(0, 0)
-    for tap in chain.in_tdo_order():
-        if tap.expected_idcode is None:
-            vector = vector + BitVector.zeros(1)
-        else:
-            vector = vector + BitVector(tap.expected_idcode, IDCODE_BITS)
-    return vector + BitVector.ones(IDCODE_BITS)
+    answers = [
+        BitVector.zeros(1)
+        if tap.expected_idcode is None
+        else BitVector(tap.expected_idcode, IDCODE_BITS)
+        for tap in chain.in_tdo_order()
+    ]
+    return BitVector.join([*answers, BitVector.ones(IDCODE_BITS)])

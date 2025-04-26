@@ -153,11 +153,8 @@ class ChainSimulator:
             raise ValidationError("tms and tdi have to be the same length", field="pulse")
         if not len(tms):
             raise ValidationError("a pulse clocks at least one bit", field="pulse")
-        out = 0
-        for index in range(len(tms)):
-            bit = self._clock(tms.bit(index), tdi.bit(index))
-            out |= bit << index
-        return BitVector(out, len(tms))
+        clocks = zip(tms.bits(), tdi.bits(), strict=True)
+        return BitVector.from_bits(self._clock(tms_bit, tdi_bit) for tms_bit, tdi_bit in clocks)
 
     def _clock(self, tms: int, tdi: int) -> int:
         out = 0
@@ -184,34 +181,39 @@ class ChainSimulator:
         return list(reversed(self.devices))
 
     def _load_dr(self) -> None:
-        bits: list[int] = []
-        for device in self._tdo_order():
-            captured = device.dr_capture()
-            bits.extend(captured.bit(index) for index in range(len(captured)))
-        self._register = bits
+        self._register = list(
+            BitVector.join(device.dr_capture() for device in self._tdo_order()).bits()
+        )
 
     def _load_ir(self) -> None:
-        bits: list[int] = []
-        for device in self._tdo_order():
-            captured = device.ir_capture()
-            bits.extend(captured.bit(index) for index in range(len(captured)))
-        self._register = bits
+        self._register = list(
+            BitVector.join(device.ir_capture() for device in self._tdo_order()).bits()
+        )
+
+    def _shifted(self, widths: list[int]) -> tuple[BitVector, ...] | None:
+        """The chain register cut up per device, or nothing if it does not fit.
+
+        A short register means the caller shifted fewer bits than the chain
+        holds, which a real device would treat as a partial update. The
+        simulator does the same thing a device does and ignores it.
+        """
+        register = BitVector.from_bits(self._register)
+        if len(register) != sum(widths):
+            return None
+        return register.split(widths)
 
     def _apply_ir(self) -> None:
-        offset = 0
-        for device in self._tdo_order():
-            width = device.ir_length
-            chunk = self._register[offset : offset + width]
-            if len(chunk) == width:
-                device.instruction = sum(bit << position for position, bit in enumerate(chunk))
-            offset += width
+        order = self._tdo_order()
+        pieces = self._shifted([device.ir_length for device in order])
+        if pieces is None:
+            return
+        for device, piece in zip(order, pieces, strict=True):
+            device.instruction = piece.value
 
     def _apply_dr(self) -> None:
-        offset = 0
-        for device in self._tdo_order():
-            width = device.dr_length()
-            chunk = self._register[offset : offset + width]
-            if len(chunk) == width:
-                value = sum(bit << position for position, bit in enumerate(chunk))
-                device.last_dr_write = BitVector(value, width)
-            offset += width
+        order = self._tdo_order()
+        pieces = self._shifted([device.dr_length() for device in order])
+        if pieces is None:
+            return
+        for device, piece in zip(order, pieces, strict=True):
+            device.last_dr_write = piece

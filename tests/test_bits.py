@@ -136,3 +136,57 @@ def test_a_chunk_size_of_nothing_is_refused():
 
 def test_an_empty_vector_chunks_to_nothing():
     assert BitVector(0, 0).chunks(4) == ()
+
+
+def test_bits_come_back_in_clock_order():
+    assert BitVector.parse("1100").bits() == (0, 0, 1, 1)
+    assert BitVector(0, 0).bits() == ()
+
+
+def test_building_from_clock_order_is_the_other_direction():
+    assert BitVector.from_bits((0, 0, 1, 1)) == BitVector.parse("1100")
+    assert BitVector.from_bits(()) == BitVector(0, 0)
+
+
+def test_bits_round_trip_through_clock_order():
+    vector = BitVector.parse("101100111")
+    assert BitVector.from_bits(vector.bits()) == vector
+
+
+def test_building_from_something_that_is_not_a_bit_is_refused():
+    with pytest.raises(ValidationError):
+        BitVector.from_bits((0, 1, 2))
+
+
+def test_joining_lays_vectors_end_to_end_in_shift_order():
+    joined = BitVector.join((BitVector.parse("11"), BitVector.parse("00"), BitVector.parse("1")))
+    assert str(joined) == "10011"
+    assert len(joined) == 5
+
+
+def test_joining_nothing_gives_an_empty_vector():
+    assert BitVector.join(()) == BitVector(0, 0)
+
+
+def test_joining_agrees_with_adding():
+    parts = [BitVector.parse("110"), BitVector.parse("0011"), BitVector.parse("1")]
+    added = parts[0] + parts[1] + parts[2]
+    assert BitVector.join(parts) == added
+
+
+def test_splitting_cuts_from_the_shifting_end():
+    pieces = BitVector.parse("10011").split((2, 2, 1))
+    assert [str(piece) for piece in pieces] == ["11", "00", "1"]
+
+
+def test_splitting_has_to_account_for_every_bit():
+    with pytest.raises(ValidationError):
+        BitVector.parse("10011").split((2, 2))
+    with pytest.raises(ValidationError):
+        BitVector.parse("10011").split((2, 2, 2))
+
+
+def test_splitting_and_joining_are_inverses():
+    vector = BitVector.parse("110100101")
+    widths = (3, 4, 2)
+    assert BitVector.join(vector.split(widths)) == vector
