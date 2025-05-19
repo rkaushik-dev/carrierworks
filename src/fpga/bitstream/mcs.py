@@ -17,6 +17,7 @@ than it saves.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 
 from fpga.errors import ValidationError
 
@@ -24,8 +25,11 @@ __all__ = [
     "DATA",
     "END_OF_FILE",
     "EXTENDED_LINEAR",
+    "HexRegion",
+    "flatten",
     "hex_record",
     "mcs_records",
+    "read_mcs",
     "write_mcs",
 ]
 
@@ -100,3 +104,108 @@ def write_mcs(data: bytes, *, start_address: int = 0, record_bytes: int = 16) ->
             record_bytes=record_bytes,
         )
     )
+
+
+@dataclass(frozen=True, slots=True)
+class HexRegion:
+    """A run of bytes that were contiguous in the file."""
+
+    start: int
+    data: bytes
+
+    @property
+    def end(self) -> int:
+        """One past the last byte, the way a slice reads."""
+        return self.start + len(self.data)
+
+    @property
+    def length(self) -> int:
+        return len(self.data)
+
+    def describe(self) -> str:
+        return f"0x{self.start:08x}..0x{self.end:08x} ({self.length} bytes)"
+
+
+def read_mcs(text: str) -> tuple[HexRegion, ...]:
+    """Read a file back into the runs of bytes it holds.
+
+    A multiboot file has a hole in the middle, so the answer is a list of
+    regions rather than one image. Joining them back together is the caller's
+    decision because it needs a fill value and the caller knows which one.
+    """
+    regions: list[tuple[int, bytearray]] = []
+    segment = 0
+    ended = False
+    for number, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line:
+            continue
+        if ended:
+            raise ValidationError("records after the end of file record", field="mcs", line=number)
+        if not line.startswith(":"):
+            raise ValidationError("a hex record starts with a colon", field="mcs", line=number)
+        try:
+            body = bytes.fromhex(line[1:])
+        except ValueError as exc:
+            raise ValidationError("a hex record is hex", field="mcs", line=number) from exc
+        if len(body) < 5:
+            raise ValidationError("a hex record is at least five bytes", field="mcs", line=number)
+        if sum(body) % 256:
+            raise ValidationError("a hex record failed its checksum", field="mcs", line=number)
+        count, address, record_type = body[0], int.from_bytes(body[1:3], "big"), body[3]
+        payload = body[4:-1]
+        if len(payload) != count:
+            raise ValidationError("a hex record lied about its length", field="mcs", line=number)
+        if record_type == END_OF_FILE:
+            ended = True
+        elif record_type == EXTENDED_LINEAR:
+            if count != 2:
+                raise ValidationError(
+                    "a segment record carries two bytes",
+                    field="mcs",
+                    line=number,
+                )
+            segment = int.from_bytes(payload, "big")
+        elif record_type == DATA:
+            start = segment * _SEGMENT + address
+            if regions and regions[-1][0] + len(regions[-1][1]) == start:
+                regions[-1][1].extend(payload)
+            else:
+                regions.append((start, bytearray(payload)))
+        else:
+            raise ValidationError(
+                "unsupported hex record type",
+                field="mcs",
+                line=number,
+                record_type=record_type,
+            )
+    if not ended:
+        raise ValidationError("the file has no end of file record", field="mcs")
+    return tuple(HexRegion(start=start, data=bytes(data)) for start, data in regions)
+
+
+def flatten(regions: tuple[HexRegion, ...], fill: int = 0xFF) -> tuple[int, bytes]:
+    """Join regions into one image, filling the holes.
+
+    Returns the address the image starts at along with the bytes, because a
+    file that begins part way up a part is normal and assuming zero would put
+    every later address out by the offset.
+    """
+    if not regions:
+        return (0, b"")
+    if not 0 <= fill <= 0xFF:
+        raise ValidationError("the fill is one byte", field="fill", given=fill)
+    ordered = sorted(regions, key=lambda region: region.start)
+    start = ordered[0].start
+    out = bytearray()
+    for region in ordered:
+        offset = region.start - start
+        if offset < len(out):
+            raise ValidationError(
+                "two regions overlap",
+                field="regions",
+                at=f"0x{region.start:08x}",
+            )
+        out.extend(bytes([fill]) * (offset - len(out)))
+        out.extend(region.data)
+    return (start, bytes(out))
