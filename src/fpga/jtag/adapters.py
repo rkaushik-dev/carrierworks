@@ -17,11 +17,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fpga.errors import CatalogError, NotFound, ValidationError
+from fpga.catalog.index import CatalogIndex
+from fpga.errors import CatalogError, ValidationError
 from fpga.ids import adapter_serial, slug
 from fpga.measure import Frequency
 
 __all__ = [
+    "ADAPTERS",
     "AdapterSpec",
     "AdapterUnit",
     "adapter_model",
@@ -110,18 +112,19 @@ _CATALOG: tuple[AdapterSpec, ...] = (
     ),
 )
 
-_BY_MODEL = {spec.model: spec for spec in _CATALOG}
+ADAPTERS: CatalogIndex[AdapterSpec] = CatalogIndex(
+    "adapter model",
+    _CATALOG,
+    key=lambda spec: spec.model,
+)
 
 
 def adapter_model(model: str) -> AdapterSpec:
-    spec = _BY_MODEL.get(slug(model))
-    if spec is None:
-        raise NotFound("adapter model", slug(model))
-    return spec
+    return ADAPTERS.require(slug(model))
 
 
 def all_adapter_models() -> tuple[AdapterSpec, ...]:
-    return _CATALOG
+    return ADAPTERS.all()
 
 
 @dataclass(frozen=True, slots=True)

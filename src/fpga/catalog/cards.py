@@ -21,10 +21,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from fpga.catalog.index import CatalogIndex
 from fpga.errors import CatalogError, NotFound
 from fpga.ids import slug
 
 __all__ = [
+    "CARDS",
     "CONNECTORS",
     "CardSpec",
     "all_cards",
@@ -161,31 +163,23 @@ _CATALOG: tuple[CardSpec, ...] = (
     ),
 )
 
-_BY_NAME: dict[str, CardSpec] = {}
-
-for _spec in _CATALOG:
-    if _spec.name in _BY_NAME:
-        raise CatalogError("card listed twice", card=_spec.name)
-    _BY_NAME[_spec.name] = _spec
+CARDS: CatalogIndex[CardSpec] = CatalogIndex("card", _CATALOG, key=lambda spec: spec.name)
 
 
 def lookup_card(name: str) -> CardSpec | None:
-    return _BY_NAME.get(name.strip().lower())
+    return CARDS.lookup(name)
 
 
 def card(name: str) -> CardSpec:
-    spec = lookup_card(name)
-    if spec is None:
-        raise NotFound("card", name.strip().lower())
-    return spec
+    return CARDS.require(name)
 
 
 def cards_providing(capability: str) -> tuple[CardSpec, ...]:
     """Every card that brings a given capability, cheapest on power first."""
     wanted = slug(capability)
-    hits = [spec for spec in _CATALOG if wanted in spec.provides]
+    hits = CARDS.where(lambda spec: wanted in spec.provides)
     return tuple(sorted(hits, key=lambda spec: (spec.power_draw_mw, spec.name)))
 
 
 def all_cards() -> tuple[CardSpec, ...]:
-    return _CATALOG
+    return CARDS.all()

@@ -16,10 +16,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from fpga.catalog.index import CatalogIndex
 from fpga.catalog.partnumber import PartNumber
-from fpga.errors import CatalogError, NotFound
 
 __all__ = [
+    "DEVICES",
     "DeviceSpec",
     "all_devices",
     "device_for",
@@ -207,49 +208,33 @@ _CATALOG: tuple[DeviceSpec, ...] = (
     ),
 )
 
-_BY_DEVICE: dict[str, DeviceSpec] = {}
-_BY_IDCODE: dict[int, DeviceSpec] = {}
-
-for _spec in _CATALOG:
-    if _spec.device in _BY_DEVICE:
-        raise CatalogError("device listed twice", device=_spec.device)
-    masked = _spec.idcode & IDCODE_MASK
-    if masked in _BY_IDCODE:
-        raise CatalogError(
-            "two devices claim one idcode",
-            device=_spec.device,
-            other=_BY_IDCODE[masked].device,
-        )
-    _BY_DEVICE[_spec.device] = _spec
-    _BY_IDCODE[masked] = _spec
+DEVICES: CatalogIndex[DeviceSpec] = CatalogIndex(
+    "device",
+    _CATALOG,
+    key=lambda spec: spec.device,
+    secondary={"idcode": lambda spec: spec.idcode & IDCODE_MASK},
+)
 
 
 def lookup_device(device: str) -> DeviceSpec | None:
     """The device with this code, or nothing if the lab does not stock it."""
-    return _BY_DEVICE.get(device.strip().lower())
+    return DEVICES.lookup(device)
 
 
 def device_for(part: PartNumber | str) -> DeviceSpec:
     """The device behind a part number or a bare device code."""
-    code = part.device if isinstance(part, PartNumber) else part
-    spec = lookup_device(code)
-    if spec is None:
-        raise NotFound("device", code.strip().lower())
-    return spec
+    return DEVICES.require(part.device if isinstance(part, PartNumber) else part)
 
 
 def device_for_idcode(idcode: int) -> DeviceSpec:
     """The device that answered a scan, revision nibble ignored."""
-    spec = _BY_IDCODE.get(idcode & IDCODE_MASK)
-    if spec is None:
-        raise NotFound("idcode", f"0x{idcode:08x}")
-    return spec
+    return DEVICES.require_by("idcode", idcode & IDCODE_MASK, shown=f"0x{idcode:08x}")
 
 
 def devices_in_family(family: str) -> tuple[DeviceSpec, ...]:
     wanted = family.strip().lower()
-    return tuple(spec for spec in _CATALOG if spec.family == wanted)
+    return DEVICES.where(lambda spec: spec.family == wanted)
 
 
 def all_devices() -> tuple[DeviceSpec, ...]:
-    return _CATALOG
+    return DEVICES.all()

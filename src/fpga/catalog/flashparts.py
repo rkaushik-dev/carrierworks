@@ -18,9 +18,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fpga.errors import CatalogError, NotFound, ValidationError
+from fpga.catalog.index import CatalogIndex
+from fpga.errors import CatalogError, ValidationError
 
 __all__ = [
+    "FLASH_PARTS",
     "FlashSpec",
     "all_flash_parts",
     "flash_for_jedec_id",
@@ -198,40 +200,26 @@ _CATALOG: tuple[FlashSpec, ...] = (
     ),
 )
 
-_BY_NAME: dict[str, FlashSpec] = {}
-_BY_JEDEC: dict[int, FlashSpec] = {}
-
-for _spec in _CATALOG:
-    if _spec.name in _BY_NAME:
-        raise CatalogError("flash part listed twice", part=_spec.name)
-    if _spec.jedec_id in _BY_JEDEC:
-        raise CatalogError(
-            "two flash parts claim one jedec id",
-            part=_spec.name,
-            other=_BY_JEDEC[_spec.jedec_id].name,
-        )
-    _BY_NAME[_spec.name] = _spec
-    _BY_JEDEC[_spec.jedec_id] = _spec
+FLASH_PARTS: CatalogIndex[FlashSpec] = CatalogIndex(
+    "flash part",
+    _CATALOG,
+    key=lambda spec: spec.name,
+    secondary={"jedec id": lambda spec: spec.jedec_id},
+)
 
 
 def lookup_flash(name: str) -> FlashSpec | None:
-    return _BY_NAME.get(name.strip().lower())
+    return FLASH_PARTS.lookup(name)
 
 
 def flash_part(name: str) -> FlashSpec:
-    spec = lookup_flash(name)
-    if spec is None:
-        raise NotFound("flash part", name.strip().lower())
-    return spec
+    return FLASH_PARTS.require(name)
 
 
 def flash_for_jedec_id(jedec_id: int) -> FlashSpec:
     """Whatever answered the read id command."""
-    spec = _BY_JEDEC.get(jedec_id)
-    if spec is None:
-        raise NotFound("flash jedec id", f"0x{jedec_id:06x}")
-    return spec
+    return FLASH_PARTS.require_by("jedec id", jedec_id, shown=f"0x{jedec_id:06x}")
 
 
 def all_flash_parts() -> tuple[FlashSpec, ...]:
-    return _CATALOG
+    return FLASH_PARTS.all()
