@@ -30,7 +30,9 @@ __all__ = [
 _TAG = re.compile(r"^(?P<prefix>[a-z]{2,4})-(?P<number>\d{1,5})$")
 _SERIAL = re.compile(r"^[A-Z0-9]{6,16}$")
 _DESIGN = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
-_SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
+# One character is allowed. Board revisions are single letters and refusing
+# rev a would mean spelling it rev-a everywhere it is printed.
+_SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
 @dataclass(frozen=True, slots=True, order=True)

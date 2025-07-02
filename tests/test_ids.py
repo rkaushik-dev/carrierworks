@@ -80,10 +80,15 @@ def test_slugs_normalise(given, expected):
     assert slug(given) == expected
 
 
-@pytest.mark.parametrize("text", ["", "-", "x", "!!"])
+@pytest.mark.parametrize("text", ["", "-", "!!", "  "])
 def test_bad_slugs_are_refused(text):
     with pytest.raises(ValidationError):
         slug(text)
+
+
+def test_a_single_character_is_a_slug_because_board_revisions_are():
+    assert slug("A") == "a"
+    assert slug("3") == "3"
 
 
 def test_ids_are_sequential_and_prefixed():
