@@ -37,7 +37,14 @@ class BoardBook:
         self._states: dict[str, BoardState] = {}
         self._epoch = when
 
-    def add(self, board: Board, *, when: datetime | None = None, state: str = "available") -> Board:
+    def add(
+        self,
+        board: Board,
+        *,
+        when: datetime | None = None,
+        state: str = "available",
+        reason: str = "",
+    ) -> Board:
         """Put a board in the book, refusing anything that collides."""
         tag = board.tag
         if tag in self._boards:
@@ -47,11 +54,10 @@ class BoardBook:
         if moment is None:
             raise ConfigurationError("a board arrives at a time", board=tag)
         self._boards[tag] = board
-        self._states[tag] = BoardState(
-            state=state,
-            since=moment,
-            reason="" if state in ("available", "leased", "programming") else "added to the bench",
-        )
+        settled = reason.strip()
+        if not settled and state not in ("available", "leased", "programming"):
+            settled = "added to the bench"
+        self._states[tag] = BoardState(state=state, since=moment, reason=settled)
         return board
 
     def _check_free(self, board: Board, *, ignoring: str = "") -> None:
