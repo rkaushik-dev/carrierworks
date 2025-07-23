@@ -112,15 +112,31 @@ class ChainSimulator:
 
     @classmethod
     def for_chain(cls, chain: ScanChain) -> ChainSimulator:
+        """A simulator matching a described chain.
+
+        A position that is not a catalogued device is still simulated as long
+        as the chain says what it answers with, which is how the system
+        controllers on the carriers get represented: the bench does not stock
+        them as devices, but it knows their idcode and their register width.
+        """
         built = []
         for tap in chain.taps:
-            if tap.device is None:
+            if tap.device is not None:
+                built.append(SimulatedDevice.for_device(tap.label, tap.device))
+            elif tap.expected_idcode is not None:
+                built.append(
+                    SimulatedDevice(
+                        label=tap.label,
+                        idcode=tap.expected_idcode,
+                        ir_length=tap.ir_length,
+                    )
+                )
+            else:
                 raise ValidationError(
-                    "a simulated chain cannot hold an unknown device",
+                    "a simulated chain cannot hold a position with no idcode",
                     field="chain",
                     tap=tap.label,
                 )
-            built.append(SimulatedDevice.for_device(tap.label, tap.device))
         return cls(built)
 
     @property
