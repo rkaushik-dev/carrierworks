@@ -19,6 +19,7 @@ __all__ = [
     "CatalogError",
     "ChainError",
     "ConfigurationError",
+    "Conflict",
     "DeviceMismatch",
     "NotFound",
     "TransientBenchError",
@@ -95,6 +96,18 @@ class ValidationError(BenchError):
         if field is not None:
             details["field"] = field
         super().__init__(message, **details)
+
+
+class Conflict(BenchError):
+    """Two things wanted the same board, lease or number at the same time.
+
+    Not a validation failure: what was asked for was perfectly sensible and
+    somebody else got there first. The http layer turns this into a 409 and
+    the scheduler treats it as a reason to look at the next candidate rather
+    than as a reason to stop.
+    """
+
+    code = "conflict"
 
 
 class NotFound(BenchError):
