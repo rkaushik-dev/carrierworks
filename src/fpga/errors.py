@@ -22,6 +22,7 @@ __all__ = [
     "Conflict",
     "DeviceMismatch",
     "NotFound",
+    "PowerFault",
     "TransientBenchError",
     "ValidationError",
 ]
@@ -79,6 +80,18 @@ class ChainError(TransientBenchError):
     """
 
     code = "chain"
+
+
+class PowerFault(TransientBenchError):
+    """A rail, an outlet or a distribution unit did not behave.
+
+    Retryable in the same sense a chain fault is: distribution units drop
+    their control connection regularly and come back on the next attempt. A
+    rail outside its window is not this error, because trying that again is
+    how a board gets damaged.
+    """
+
+    code = "power"
 
 
 class ConfigurationError(BenchError):
