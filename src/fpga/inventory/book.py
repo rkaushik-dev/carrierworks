@@ -25,6 +25,7 @@ from fpga.ids import AssetTag
 from fpga.inventory.boards import Board, BoardSummary
 from fpga.inventory.profile import matches
 from fpga.inventory.state import BoardState
+from fpga.records import describe_tally, tally
 
 __all__ = ["BoardBook"]
 
@@ -170,9 +171,7 @@ class BoardBook:
         return tuple(BoardSummary.of(board) for board in self.all())
 
     def describe(self) -> str:
-        counts: dict[str, int] = {}
-        for board in self.all():
-            state = self._states[board.tag].state
-            counts[state] = counts.get(state, 0) + 1
-        parts = [f"{count} {state}" for state, count in sorted(counts.items())]
-        return f"{len(self)} boards: " + ", ".join(parts) if parts else "no boards"
+        if not self._boards:
+            return "no boards"
+        counts = tally(self._states[board.tag].state for board in self.all())
+        return f"{len(self)} boards: " + describe_tally(counts)

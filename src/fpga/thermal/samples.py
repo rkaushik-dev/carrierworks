@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 
 from fpga.errors import ValidationError
 from fpga.ids import AssetTag, slug
+from fpga.records import PerBoard, in_window
 from fpga.temperature import render_temperature
 
 __all__ = [
@@ -65,17 +66,14 @@ class ThermalLog:
     """Recent readings, per board."""
 
     def __init__(self, *, keep: int = _DEFAULT_KEEP) -> None:
-        if keep < 2:
-            raise ValidationError("keep at least two samples", field="keep", given=keep)
-        self.keep = keep
-        self._samples: dict[str, list[ThermalSample]] = {}
+        self._samples: PerBoard[ThermalSample] = PerBoard(keep=keep)
+
+    @property
+    def keep(self) -> int:
+        return self._samples.keep or _DEFAULT_KEEP
 
     def record(self, sample: ThermalSample) -> ThermalSample:
-        held = self._samples.setdefault(sample.board, [])
-        held.append(sample)
-        if len(held) > self.keep:
-            del held[: len(held) - self.keep]
-        return sample
+        return self._samples.append(sample.board, sample)
 
     def add(
         self,
@@ -89,23 +87,20 @@ class ThermalLog:
             ThermalSample(board=board, at=at, millidegrees=millidegrees, source=source)
         )
 
-    def _for(self, board: str) -> list[ThermalSample]:
-        return self._samples.get(str(AssetTag.parse(board)), [])
+    def _for(self, board: str) -> tuple[ThermalSample, ...]:
+        return self._samples.items(board)
 
     def boards(self) -> tuple[str, ...]:
-        return tuple(sorted(self._samples))
+        return self._samples.boards()
 
     def latest(self, board: str) -> ThermalSample | None:
-        held = self._for(board)
-        return held[-1] if held else None
+        return self._samples.latest(board)
 
     def since(self, board: str, when: datetime) -> tuple[ThermalSample, ...]:
         return tuple(sample for sample in self._for(board) if sample.at >= when)
 
     def window(self, board: str, now: datetime, length: timedelta) -> tuple[ThermalSample, ...]:
-        if length <= timedelta(0):
-            raise ValidationError("a window has some length", field="length")
-        return tuple(sample for sample in self._for(board) if now - length <= sample.at <= now)
+        return in_window(self._for(board), now, length, at=lambda sample: sample.at)
 
     def average(self, board: str, now: datetime, length: timedelta) -> int | None:
         """Mean temperature over a window, or nothing if there is no data."""
@@ -145,15 +140,7 @@ class ThermalLog:
 
     def prune(self, before: datetime) -> int:
         """Drop everything older than a moment, returning how many went."""
-        dropped = 0
-        for board, held in list(self._samples.items()):
-            keep = [sample for sample in held if sample.at >= before]
-            dropped += len(held) - len(keep)
-            if keep:
-                self._samples[board] = keep
-            else:
-                del self._samples[board]
-        return dropped
+        return self._samples.prune(lambda sample: sample.at >= before)
 
     def __len__(self) -> int:
-        return sum(len(held) for held in self._samples.values())
+        return len(self._samples)

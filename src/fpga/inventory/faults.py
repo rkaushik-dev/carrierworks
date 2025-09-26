@@ -21,7 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from fpga.errors import ValidationError
-from fpga.ids import AssetTag, slug
+from fpga.ids import slug
+from fpga.records import board_key, in_window
 
 __all__ = [
     "FAULT_KINDS",
@@ -44,7 +45,7 @@ class FaultRecord:
     job: str = ""
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "board", str(AssetTag.parse(self.board)))
+        object.__setattr__(self, "board", board_key(self.board))
         object.__setattr__(self, "kind", slug(self.kind))
         if self.kind not in FAULT_KINDS:
             raise ValidationError("no such fault kind", field="kind", given=self.kind)
@@ -85,7 +86,7 @@ class FaultLog:
         return tuple(self._records)
 
     def for_board(self, board: str) -> tuple[FaultRecord, ...]:
-        tag = str(AssetTag.parse(board))
+        tag = board_key(board)
         return tuple(record for record in self._records if record.board == tag)
 
     def within(
@@ -97,15 +98,9 @@ class FaultLog:
         kind: str | None = None,
     ) -> tuple[FaultRecord, ...]:
         """Faults on a board inside a window ending now."""
-        if window <= timedelta(0):
-            raise ValidationError("a window has some length", field="window")
-        start = now - window
         wanted = None if kind is None else slug(kind)
-        return tuple(
-            record
-            for record in self.for_board(board)
-            if start <= record.at <= now and (wanted is None or record.kind == wanted)
-        )
+        inside = in_window(self.for_board(board), now, window, at=lambda record: record.at)
+        return tuple(record for record in inside if wanted is None or record.kind == wanted)
 
     def count(
         self,
@@ -130,7 +125,7 @@ class FaultLog:
         Returns how many were dropped, because that number goes in the
         maintenance record and somebody will want it later.
         """
-        tag = str(AssetTag.parse(board))
+        tag = board_key(board)
         before = len(self._records)
         self._records = [record for record in self._records if record.board != tag]
         return before - len(self._records)

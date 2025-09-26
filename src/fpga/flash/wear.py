@@ -25,6 +25,7 @@ from fpga.catalog.flashparts import FlashSpec
 from fpga.errors import ValidationError
 from fpga.flash.plan import FlashPlan
 from fpga.ids import AssetTag
+from fpga.records import board_key
 
 __all__ = [
     "SectorWear",
@@ -90,8 +91,7 @@ class WearLedger:
         self.path.write_text(json.dumps(serialisable, indent=2), encoding="utf-8")
 
     def _key(self, asset: AssetTag | str) -> str:
-        tag = asset if isinstance(asset, AssetTag) else AssetTag.parse(asset)
-        return str(tag)
+        return board_key(str(asset))
 
     def record(self, asset: AssetTag | str, plan: FlashPlan) -> int:
         """Count the erases a plan will cause, and return how many that was.

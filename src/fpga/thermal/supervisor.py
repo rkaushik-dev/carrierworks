@@ -27,6 +27,7 @@ from fpga.inventory.book import BoardBook
 from fpga.leases.store import LeaseStore
 from fpga.locations import downwind_of
 from fpga.power.pdu import PowerController
+from fpga.records import describe_tally, tally
 from fpga.thermal.alarms import UNKNOWN, AlarmBook, ThermalStatus
 from fpga.thermal.samples import ThermalLog
 
@@ -137,11 +138,5 @@ class ThermalSupervisor:
         return statuses[0] if statuses else None
 
     def summary(self) -> str:
-        statuses = self.alarms.worst_first()
-        if not statuses:
-            return "nothing being watched"
-        counts: dict[str, int] = {}
-        for status in statuses:
-            counts[status.state] = counts.get(status.state, 0) + 1
-        parts = [f"{count} {state}" for state, count in sorted(counts.items())]
-        return ", ".join(parts)
+        counts = tally(status.state for status in self.alarms.worst_first())
+        return describe_tally(counts, empty="nothing being watched")

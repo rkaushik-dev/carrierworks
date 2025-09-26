@@ -20,8 +20,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from fpga.errors import ValidationError
-from fpga.ids import AssetTag, slug
+from fpga.ids import slug
 from fpga.inventory.boards import Board
+from fpga.records import board_key
 
 __all__ = [
     "CALIBRATION_INTERVAL",
@@ -51,7 +52,7 @@ class MaintenanceRecord:
     faults_cleared: int = 0
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "board", str(AssetTag.parse(self.board)))
+        object.__setattr__(self, "board", board_key(self.board))
         object.__setattr__(self, "kind", slug(self.kind))
         if self.kind not in MAINTENANCE_KINDS:
             raise ValidationError("no such maintenance kind", field="kind", given=self.kind)
@@ -114,7 +115,7 @@ class MaintenanceBook:
         return tuple(self._records)
 
     def for_board(self, board: str) -> tuple[MaintenanceRecord, ...]:
-        tag = str(AssetTag.parse(board))
+        tag = board_key(board)
         return tuple(record for record in self._records if record.board == tag)
 
     def last(self, board: str, kind: str | None = None) -> MaintenanceRecord | None:
