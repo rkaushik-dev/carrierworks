@@ -17,6 +17,7 @@ def kintex(
     serial="210308AB1234",
     outlet=7,
     pdu_name="pdu-a",
+    adapter_model="jtag-hs2",
     slots=None,
     **rest,
 ):
@@ -35,7 +36,7 @@ def kintex(
             if slots is None
             else slots
         ),
-        adapter=None if serial is None else AdapterUnit(serial=serial, model="jtag-hs2"),
+        adapter=None if serial is None else AdapterUnit(serial=serial, model=adapter_model),
         pdu=None if outlet is None else PduChannel(pdu_name, outlet),
         **rest,
     )
@@ -47,6 +48,7 @@ def artix(
     serial="210308CD5678",
     outlet=9,
     pdu_name="pdu-b",
+    adapter_model="jtag-hs3",
     slots=None,
     **rest,
 ):
@@ -65,7 +67,7 @@ def artix(
             if slots is None
             else slots
         ),
-        adapter=None if serial is None else AdapterUnit(serial=serial, model="jtag-hs3"),
+        adapter=None if serial is None else AdapterUnit(serial=serial, model=adapter_model),
         pdu=None if outlet is None else PduChannel(pdu_name, outlet),
         **rest,
     )
