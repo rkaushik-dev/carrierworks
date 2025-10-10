@@ -32,6 +32,13 @@ __all__ = [
 
 _IDCODE = INSTRUCTIONS["idcode"]
 _USERCODE = INSTRUCTIONS["usercode"]
+_CFG_IN = INSTRUCTIONS["cfg_in"]
+_CFG_OUT = INSTRUCTIONS["cfg_out"]
+_JPROGRAM = INSTRUCTIONS["jprogram"]
+_JSTART = INSTRUCTIONS["jstart"]
+
+# Bit fourteen of the status register is done, on every seven series part.
+DONE_BIT = 1 << 14
 _BYPASS_BITS = 1
 _IDCODE_BITS = 32
 _CAPTURED_IR = 0b01
@@ -49,6 +56,8 @@ class SimulatedDevice:
     instruction: int = _IDCODE
     last_dr_write: BitVector | None = None
     register: list[int] = field(default_factory=list)
+    config_data: bytearray = field(default_factory=bytearray)
+    configured: bool = False
 
     @classmethod
     def for_device(cls, label: str, device: str) -> SimulatedDevice:
@@ -56,6 +65,11 @@ class SimulatedDevice:
         return cls(label=label, idcode=spec.idcode, ir_length=spec.ir_length)
 
     def reset(self) -> None:
+        """A tap reset puts the instruction back but leaves the device configured.
+
+        That is what the silicon does, and it matters: a chain rescan in the
+        middle of a session does not wipe the image somebody just loaded.
+        """
         self.instruction = _IDCODE
         self.last_dr_write = None
 
@@ -64,7 +78,7 @@ class SimulatedDevice:
         return self.instruction == INSTRUCTIONS["bypass"]
 
     def dr_length(self) -> int:
-        if self.instruction in (_IDCODE, _USERCODE):
+        if self.instruction in (_IDCODE, _USERCODE, _CFG_OUT):
             return _IDCODE_BITS
         if self.instruction in (
             INSTRUCTIONS["user1"],
@@ -81,7 +95,29 @@ class SimulatedDevice:
             return BitVector(self.idcode, _IDCODE_BITS)
         if self.instruction == _USERCODE:
             return BitVector(self.usercode, _IDCODE_BITS)
+        if self.instruction == _CFG_OUT:
+            return BitVector(self.status_word(), _IDCODE_BITS)
         return BitVector.zeros(self.dr_length())
+
+    def status_word(self) -> int:
+        """The status register, with the done bit where the silicon puts it."""
+        return DONE_BIT if self.configured else 0
+
+    def apply_instruction(self, instruction: int) -> None:
+        """Take the side effects an instruction has on configuration.
+
+        Loading jprogram clears the device, jstart runs whatever has been
+        shifted in, and everything else leaves the configuration alone.
+        """
+        if instruction == _JPROGRAM:
+            self.config_data = bytearray()
+            self.configured = False
+        elif instruction == _JSTART and self.config_data:
+            self.configured = True
+        self.instruction = instruction
+
+    def take_config(self, written: BitVector) -> None:
+        self.config_data.extend(written.to_bytes())
 
     def ir_capture(self) -> BitVector:
         return BitVector(_CAPTURED_IR, self.ir_length)
@@ -99,6 +135,7 @@ class ChainSimulator:
         self.closed = False
         self._register: list[int] = []
         self._shifting = ""
+        self._stream: list[int] = []
         self.reset()
 
     @classmethod
@@ -155,6 +192,7 @@ class ChainSimulator:
         self.state = "test_logic_reset"
         self._register = []
         self._shifting = ""
+        self._stream = []
 
     def device(self, label: str) -> SimulatedDevice:
         for device in self.devices:
@@ -177,6 +215,8 @@ class ChainSimulator:
         if self._shifting:
             out = self._register[0] if self._register else 0
             self._register = [*self._register[1:], tdi]
+            if self._shifting == "dr":
+                self._stream.append(tdi)
         nxt = step(self.state, tms)
         if nxt == "test_logic_reset":
             self.reset()
@@ -197,6 +237,7 @@ class ChainSimulator:
         return list(reversed(self.devices))
 
     def _load_dr(self) -> None:
+        self._stream = []
         self._register = list(
             BitVector.join(device.dr_capture() for device in self._tdo_order()).bits()
         )
@@ -224,10 +265,20 @@ class ChainSimulator:
         if pieces is None:
             return
         for device, piece in zip(order, pieces, strict=True):
-            device.instruction = piece.value
+            device.apply_instruction(piece.value)
 
     def _apply_dr(self) -> None:
         order = self._tdo_order()
+        streaming = [device for device in order if device.instruction == _CFG_IN]
+        if streaming:
+            # A configuration write is a stream of any length rather than a
+            # register of a known one, so it is taken from what was shifted in
+            # rather than from what the chain register held.
+            written = BitVector.from_bits(self._stream)
+            for device in streaming:
+                device.take_config(written)
+                device.last_dr_write = written
+            return
         pieces = self._shifted([device.dr_length() for device in order])
         if pieces is None:
             return
