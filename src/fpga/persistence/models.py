@@ -29,6 +29,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -36,6 +37,8 @@ __all__ = [
     "Base",
     "BoardRow",
     "BoardStateRow",
+    "JobRow",
+    "LeaseRow",
     "SlotRow",
 ]
 
@@ -132,3 +135,70 @@ class BoardStateRow(Base):
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
 
     board: Mapped[BoardRow] = relationship(back_populates="state")
+
+
+class LeaseRow(Base):
+    """One hold on one board, live or closed.
+
+    The partial index is the interesting line. One board can have any number
+    of closed leases and at most one open one, and saying that in the schema
+    means two writers racing to take the same board produce an error rather
+    than two holders.
+    """
+
+    __tablename__ = "leases"
+    __table_args__ = (
+        Index(
+            "uq_leases_active_board",
+            "board_tag",
+            unique=True,
+            sqlite_where=text("released_at IS NULL"),
+            postgresql_where=text("released_at IS NULL"),
+        ),
+        Index("ix_leases_holder", "holder"),
+        Index("ix_leases_taken_at", "taken_at"),
+        CheckConstraint("priority between 1 and 9", name="ck_leases_priority"),
+        CheckConstraint("expires_at > taken_at", name="ck_leases_window"),
+    )
+
+    id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    board_tag: Mapped[str] = mapped_column(_TAG, ForeignKey("boards.tag", ondelete="RESTRICT"))
+    holder: Mapped[str] = mapped_column(_NAME)
+    purpose: Mapped[str] = mapped_column(String(240))
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    priority: Mapped[int] = mapped_column(Integer, default=5)
+    renewals: Mapped[int] = mapped_column(Integer, default=0)
+    preemptible: Mapped[bool] = mapped_column(Boolean, default=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    release_reason: Mapped[str] = mapped_column(String(120), default="")
+
+
+class JobRow(Base):
+    """One programming job, from queued to whatever became of it."""
+
+    __tablename__ = "jobs"
+    __table_args__ = (
+        Index("ix_jobs_board_state", "board_tag", "state"),
+        Index("ix_jobs_digest", "digest"),
+        Index("ix_jobs_created_at", "created_at"),
+        CheckConstraint("attempts >= 0", name="ck_jobs_attempts"),
+        CheckConstraint("length(digest) = 64", name="ck_jobs_digest"),
+    )
+
+    id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    board_tag: Mapped[str] = mapped_column(_TAG, ForeignKey("boards.tag", ondelete="RESTRICT"))
+    digest: Mapped[str] = mapped_column(String(64))
+    mode: Mapped[str] = mapped_column(String(16))
+    requested_by: Mapped[str] = mapped_column(_NAME)
+    state: Mapped[str] = mapped_column(String(16), default="queued")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    verify: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    not_before: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str] = mapped_column(String(240), default="")
+    error_code: Mapped[str] = mapped_column(String(32), default="")
+    clocks: Mapped[int] = mapped_column(Integer, default=0)
+    lease_id: Mapped[str | None] = mapped_column(String(24), nullable=True)
