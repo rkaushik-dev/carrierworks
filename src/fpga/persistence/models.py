@@ -34,11 +34,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 __all__ = [
+    "ArtifactRow",
     "Base",
     "BoardRow",
     "BoardStateRow",
+    "BuildReportRow",
     "JobRow",
     "LeaseRow",
+    "ProvenanceRow",
     "SlotRow",
 ]
 
@@ -202,3 +205,104 @@ class JobRow(Base):
     error_code: Mapped[str] = mapped_column(String(32), default="")
     clocks: Mapped[int] = mapped_column(Integer, default=0)
     lease_id: Mapped[str | None] = mapped_column(String(24), nullable=True)
+
+
+class ArtifactRow(Base):
+    """One stored image, addressed by what is inside it."""
+
+    __tablename__ = "artifacts"
+    __table_args__ = (
+        Index("ix_artifacts_design", "design"),
+        Index("ix_artifacts_channel", "channel"),
+        Index("ix_artifacts_device", "device"),
+        CheckConstraint("length(digest) = 64", name="ck_artifacts_digest"),
+        CheckConstraint("length_bytes > 0", name="ck_artifacts_length"),
+    )
+
+    digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    design: Mapped[str] = mapped_column(_NAME)
+    device: Mapped[str] = mapped_column(String(16))
+    length_bytes: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(8))
+    channel: Mapped[str] = mapped_column(String(16), default="dev")
+    source: Mapped[str] = mapped_column(_NAME, default="")
+    tool_version: Mapped[str] = mapped_column(String(32), default="")
+    stored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    tags: Mapped[str] = mapped_column(String(240), default="")
+
+    builds: Mapped[list[ProvenanceRow]] = relationship(
+        back_populates="artifact",
+        cascade="all, delete-orphan",
+        order_by="ProvenanceRow.built_at",
+    )
+    reports: Mapped[list[BuildReportRow]] = relationship(
+        back_populates="artifact",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProvenanceRow(Base):
+    """One build that produced an image.
+
+    Several builds can produce the same image, so the key is the pair rather
+    than the digest. That is not a hypothetical: rebuilding a tag on a
+    different agent does it every time.
+    """
+
+    __tablename__ = "provenance"
+    __table_args__ = (
+        UniqueConstraint("digest", "build_id", name="uq_provenance_build"),
+        Index("ix_provenance_revision", "source_revision"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    digest: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("artifacts.digest", ondelete="CASCADE"),
+    )
+    design: Mapped[str] = mapped_column(_NAME)
+    source_revision: Mapped[str] = mapped_column(String(40))
+    build_id: Mapped[str] = mapped_column(_NAME)
+    built_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    tool_version: Mapped[str] = mapped_column(String(32), default="")
+    constraints_digest: Mapped[str] = mapped_column(String(64), default="")
+    builder: Mapped[str] = mapped_column(_NAME, default="")
+    branch: Mapped[str] = mapped_column(_NAME, default="")
+    dirty: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    artifact: Mapped[ArtifactRow] = relationship(back_populates="builds")
+
+
+class BuildReportRow(Base):
+    """The numbers out of one build's timing and utilization reports."""
+
+    __tablename__ = "build_reports"
+    __table_args__ = (
+        UniqueConstraint("digest", name="uq_build_reports_digest"),
+        Index("ix_build_reports_design", "design"),
+        CheckConstraint("setup_failing >= 0", name="ck_reports_setup_failing"),
+        CheckConstraint("hold_failing >= 0", name="ck_reports_hold_failing"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    digest: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("artifacts.digest", ondelete="CASCADE"),
+    )
+    design: Mapped[str] = mapped_column(_NAME)
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    wns_ps: Mapped[int] = mapped_column(Integer)
+    tns_ps: Mapped[int] = mapped_column(Integer)
+    setup_failing: Mapped[int] = mapped_column(Integer, default=0)
+    setup_total: Mapped[int] = mapped_column(Integer, default=0)
+    whs_ps: Mapped[int] = mapped_column(Integer)
+    ths_ps: Mapped[int] = mapped_column(Integer)
+    hold_failing: Mapped[int] = mapped_column(Integer, default=0)
+    hold_total: Mapped[int] = mapped_column(Integer, default=0)
+    luts: Mapped[int] = mapped_column(Integer, default=0)
+    registers: Mapped[int] = mapped_column(Integer, default=0)
+    block_ram: Mapped[int] = mapped_column(Integer, default=0)
+    dsp: Mapped[int] = mapped_column(Integer, default=0)
+    is_baseline: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    artifact: Mapped[ArtifactRow] = relationship(back_populates="reports")
