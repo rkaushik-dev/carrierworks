@@ -21,6 +21,7 @@ from typing import Any
 
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from fpga.config import BenchSettings
 from fpga.persistence.models import Base
@@ -34,9 +35,19 @@ __all__ = [
 
 
 def build_engine(settings: BenchSettings | None = None, *, echo: bool = False) -> Engine:
-    """An engine for the configured database, with sqlite made usable."""
+    """An engine for the configured database, with sqlite made usable.
+
+    An in memory database needs the static pool. Without it every session
+    opens its own connection, and in sqlite a new connection to :memory: is a
+    new empty database, so the schema created at startup is simply not there
+    when the first query runs.
+    """
     live = settings or BenchSettings()
-    engine = create_engine(live.database_url, echo=echo, future=True)
+    options: dict[str, object] = {"echo": echo, "future": True}
+    if ":memory:" in live.database_url:
+        options["poolclass"] = StaticPool
+        options["connect_args"] = {"check_same_thread": False}
+    engine = create_engine(live.database_url, **options)
 
     @event.listens_for(engine, "connect")
     def _on_connect(connection: Any, record: Any) -> None:  # pragma: no cover - driver callback

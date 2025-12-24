@@ -48,8 +48,13 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP", "C4", "SIM", "RET"]
 
 [tool.ruff.lint.per-file-ignores]
-# A test that a constructor refuses has to evaluate the expression on its own.
-"tests/*" = ["B018"]
+# A test that a constructor refuses has to evaluate the expression on its own,
+# and a test that stands a route up declares its dependencies the way a route
+# does, which is as call defaults.
+"tests/*" = ["B018", "B008"]
+# Routes declare their dependencies as call defaults. That is the framework's
+# calling convention and there is no other way to write it.
+"src/fpga/api/*" = ["B008"]
 # The timing and utilization reports are quoted exactly as the tools write
 # them, and their table rows are wider than any line limit. Reflowing them
 # would test a file no build has ever produced.
