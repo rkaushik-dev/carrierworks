@@ -16,10 +16,11 @@ from __future__ import annotations
 from types import TracebackType
 
 from sqlalchemy import Engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from fpga.config import BenchSettings
-from fpga.errors import ValidationError
+from fpga.errors import Conflict, ValidationError
 from fpga.persistence.engine import build_engine, create_schema, session_factory
 from fpga.persistence.repositories import (
     ArtifactRepository,
@@ -32,6 +33,12 @@ __all__ = [
     "BenchDatabase",
     "UnitOfWork",
 ]
+
+
+def _reason(clash: IntegrityError) -> str:
+    """The constraint name out of a driver message, for the error details."""
+    text = str(clash.orig) if clash.orig is not None else str(clash)
+    return text.strip().splitlines()[0][:160]
 
 
 class UnitOfWork:
@@ -88,7 +95,18 @@ class UnitOfWork:
             self._session = None
 
     def commit(self) -> None:
-        self.session.commit()
+        """Commit, turning a constraint violation into a conflict.
+
+        The database is the last line of defence for the invariants the bench
+        rests on, and when it fires the caller has raced somebody else rather
+        than asked for something silly. That is a conflict, and saying so here
+        keeps sqlalchemy out of every layer above this one.
+        """
+        try:
+            self.session.commit()
+        except IntegrityError as clash:
+            self.rollback()
+            raise Conflict("that write collided with another", detail=_reason(clash)) from clash
         self.committed = True
 
     def rollback(self) -> None:
