@@ -20,7 +20,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from fpga.api.routes import boards
+from fpga.api.routes import boards, leases
 from fpga.config import BenchSettings
 from fpga.errors import (
     BenchError,
@@ -75,6 +75,7 @@ def build_app(
         return JSONResponse(status_code=status_for(error), content={"error": error.as_dict()})
 
     app.include_router(boards.router)
+    app.include_router(leases.router)
 
     @app.get("/health", tags=["bench"])
     def health() -> dict[str, Any]:
