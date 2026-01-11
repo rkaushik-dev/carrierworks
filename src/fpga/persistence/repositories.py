@@ -17,6 +17,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from fpga.artifacts.provenance import Provenance
 from fpga.artifacts.registry import ArtifactRecord
 from fpga.errors import NotFound
 from fpga.inventory.boards import Board
@@ -41,12 +42,14 @@ from fpga.persistence.models import (
     BoardStateRow,
     JobRow,
     LeaseRow,
+    ProvenanceRow,
     SlotRow,
 )
 from fpga.records import board_key
 
 __all__ = [
     "ArtifactRepository",
+    "ProvenanceRepository",
     "BoardRepository",
     "JobRepository",
     "LeaseRepository",
@@ -323,3 +326,57 @@ class ArtifactRepository:
             .order_by(ArtifactRow.stored_at.desc())
         ).all()
         return tuple(artifact_from_row(row) for row in rows)
+
+
+class ProvenanceRepository:
+    """The builds that produced each image."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, build: Provenance) -> Provenance:
+        self.session.add(
+            ProvenanceRow(
+                digest=build.digest,
+                design=build.design,
+                source_revision=build.source_revision,
+                build_id=build.build_id,
+                built_at=datetime.fromisoformat(build.built_at),
+                tool_version=build.tool_version,
+                constraints_digest=build.constraints_digest,
+                builder=build.builder,
+                branch=build.branch,
+                dirty=build.dirty,
+            )
+        )
+        return build
+
+    def for_digest(self, digest: str) -> tuple[Provenance, ...]:
+        rows = self.session.scalars(
+            select(ProvenanceRow)
+            .where(ProvenanceRow.digest == digest)
+            .order_by(ProvenanceRow.built_at, ProvenanceRow.id)
+        ).all()
+        return tuple(
+            Provenance(
+                digest=row.digest,
+                design=row.design,
+                source_revision=row.source_revision,
+                build_id=row.build_id,
+                built_at=row.built_at.isoformat(),
+                tool_version=row.tool_version,
+                constraints_digest=row.constraints_digest,
+                builder=row.builder,
+                branch=row.branch,
+                dirty=row.dirty,
+            )
+            for row in rows
+        )
+
+    def disagreements(self, digest: str) -> tuple[str, ...]:
+        """Builds of one image whose inputs differ from the first recorded."""
+        builds = self.for_digest(digest)
+        if len(builds) < 2:
+            return ()
+        first = builds[0]
+        return tuple(build.build_id for build in builds[1:] if not build.same_source_as(first))

@@ -27,6 +27,7 @@ from fpga.persistence.repositories import (
     BoardRepository,
     JobRepository,
     LeaseRepository,
+    ProvenanceRepository,
 )
 
 __all__ = [
@@ -71,6 +72,10 @@ class UnitOfWork:
     @property
     def artifacts(self) -> ArtifactRepository:
         return ArtifactRepository(self.session)
+
+    @property
+    def provenance(self) -> ProvenanceRepository:
+        return ProvenanceRepository(self.session)
 
     def __enter__(self) -> UnitOfWork:
         self._session = self._factory()
