@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from alembic.script import ScriptDirectory
+from sqlalchemy import create_engine, inspect, text
 
 from fpga.persistence.models import Base
 
@@ -69,11 +70,22 @@ def test_the_migration_runs_twice_without_complaint(url):
     assert "boards" in inspector.get_table_names()
 
 
-def test_the_version_is_stamped(url):
-    command.upgrade(alembic_config(url), "head")
+def test_the_version_is_stamped_at_the_latest_revision(url):
+    """The stamp is the head revision, whichever that is today."""
+    config = alembic_config(url)
+    command.upgrade(config, "head")
     engine = create_engine(url)
     with engine.connect() as connection:
-        from sqlalchemy import text
-
         found = connection.execute(text("select version_num from alembic_version")).scalar_one()
-    assert found == "0001"
+    latest = ScriptDirectory.from_config(config).get_current_head()
+    assert found == latest
+
+
+def test_the_baseline_can_be_stopped_at_and_then_carried_on(url):
+    """A site part way up the history upgrades the rest of the way."""
+    config = alembic_config(url)
+    command.upgrade(config, "0001")
+    inspector = inspect(create_engine(url))
+    assert "api_keys" not in inspector.get_table_names()
+    command.upgrade(config, "head")
+    assert "api_keys" in inspect(create_engine(url)).get_table_names()

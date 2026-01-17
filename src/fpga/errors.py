@@ -21,9 +21,11 @@ __all__ = [
     "ConfigurationError",
     "Conflict",
     "DeviceMismatch",
+    "Forbidden",
     "NotFound",
     "PowerFault",
     "TransientBenchError",
+    "Unauthorized",
     "ValidationError",
 ]
 
@@ -108,6 +110,30 @@ class ValidationError(BenchError):
     def __init__(self, message: str, *, field: str | None = None, **details: Any) -> None:
         if field is not None:
             details["field"] = field
+        super().__init__(message, **details)
+
+
+class Unauthorized(BenchError):
+    """No credential was presented, or the one presented is not a key.
+
+    Separate from the refusal below because the remedy is different: this one
+    means send a key, and that one means send a different key or ask somebody
+    for a role.
+    """
+
+    code = "unauthorized"
+
+
+class Forbidden(BenchError):
+    """A key was presented and it does not carry the role this needs."""
+
+    code = "forbidden"
+
+    def __init__(self, message: str, *, needs: str = "", holds: str = "", **details: Any) -> None:
+        if needs:
+            details["needs"] = needs
+        if holds:
+            details["holds"] = holds
         super().__init__(message, **details)
 
 

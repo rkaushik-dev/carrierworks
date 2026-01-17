@@ -6,8 +6,10 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 
+from fpga.access import ApiKey
 from fpga.api.deps import now, unit_of_work
 from fpga.api.schemas import BoardIn, BoardOut, StateIn
+from fpga.api.security import needs
 from fpga.catalog.partnumber import parse_part_number
 from fpga.ids import AssetTag
 from fpga.inventory.boards import Board, BoardSlot
@@ -69,6 +71,7 @@ def add_board(
     incoming: BoardIn,
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
+    _: ApiKey = Depends(needs("admin")),
 ) -> BoardOut:
     """Put a board on the bench."""
     board = inventory.add_board(unit, _to_board(incoming), moment)
@@ -82,6 +85,7 @@ def set_state(
     change: StateIn,
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
+    _: ApiKey = Depends(needs("operator")),
 ) -> BoardOut:
     """Move a board's state, through the rules that say which moves exist."""
     if change.state == "faulted":
@@ -110,6 +114,7 @@ def fit_card(
     slot: str,
     card: str | None = Query(default=None, description="the card, or nothing to remove one"),
     unit: UnitOfWork = Depends(unit_of_work),
+    _: ApiKey = Depends(needs("admin")),
 ) -> BoardOut:
     """Record a card being fitted to or taken out of a slot."""
     board = inventory.fit_card(unit, tag, slot, card)
@@ -121,6 +126,10 @@ def fit_card(
 # framework is concerned, and it refuses to pair one with a 204. Saying there
 # is no model is what actually means no body.
 @router.delete("/{tag}", status_code=204, response_model=None)
-def remove_board(tag: str, unit: UnitOfWork = Depends(unit_of_work)) -> None:
+def remove_board(
+    tag: str,
+    unit: UnitOfWork = Depends(unit_of_work),
+    _: ApiKey = Depends(needs("admin")),
+) -> None:
     """Take a board off the bench entirely."""
     unit.boards.remove(tag)

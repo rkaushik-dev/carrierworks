@@ -23,6 +23,7 @@ from fpga.config import BenchSettings
 from fpga.errors import Conflict, ValidationError
 from fpga.persistence.engine import build_engine, create_schema, session_factory
 from fpga.persistence.repositories import (
+    ApiKeyRepository,
     ArtifactRepository,
     BoardRepository,
     JobRepository,
@@ -76,6 +77,10 @@ class UnitOfWork:
     @property
     def provenance(self) -> ProvenanceRepository:
         return ProvenanceRepository(self.session)
+
+    @property
+    def api_keys(self) -> ApiKeyRepository:
+        return ApiKeyRepository(self.session)
 
     def __enter__(self) -> UnitOfWork:
         self._session = self._factory()

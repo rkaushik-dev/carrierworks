@@ -34,6 +34,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 __all__ = [
+    "ApiKeyRow",
     "ArtifactRow",
     "Base",
     "BoardRow",
@@ -306,3 +307,28 @@ class BuildReportRow(Base):
     is_baseline: Mapped[bool] = mapped_column(Boolean, default=False)
 
     artifact: Mapped[ArtifactRow] = relationship(back_populates="reports")
+
+
+class ApiKeyRow(Base):
+    """One credential, stored as a digest rather than as a secret.
+
+    The secret is never written down. What is stored is a sha256 of it, so a
+    copy of this table is not a way into the bench, and a lost key is issued
+    again rather than looked up.
+    """
+
+    __tablename__ = "api_keys"
+    __table_args__ = (
+        UniqueConstraint("secret_digest", name="uq_api_keys_secret"),
+        Index("ix_api_keys_role", "role"),
+        CheckConstraint("length(secret_digest) = 64", name="ck_api_keys_digest"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    label: Mapped[str] = mapped_column(_NAME)
+    secret_digest: Mapped[str] = mapped_column(String(64))
+    role: Mapped[str] = mapped_column(String(16))
+    team: Mapped[str] = mapped_column(_NAME, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)

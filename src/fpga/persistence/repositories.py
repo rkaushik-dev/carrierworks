@@ -17,6 +17,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from fpga.access import ApiKey
 from fpga.artifacts.provenance import Provenance
 from fpga.artifacts.registry import ArtifactRecord
 from fpga.errors import NotFound
@@ -37,6 +38,7 @@ from fpga.persistence.mappers import (
     state_to_row,
 )
 from fpga.persistence.models import (
+    ApiKeyRow,
     ArtifactRow,
     BoardRow,
     BoardStateRow,
@@ -48,6 +50,7 @@ from fpga.persistence.models import (
 from fpga.records import board_key
 
 __all__ = [
+    "ApiKeyRepository",
     "ArtifactRepository",
     "ProvenanceRepository",
     "BoardRepository",
@@ -380,3 +383,62 @@ class ProvenanceRepository:
             return ()
         first = builds[0]
         return tuple(build.build_id for build in builds[1:] if not build.same_source_as(first))
+
+
+class ApiKeyRepository:
+    """Credentials, stored as digests."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, key: ApiKey, secret_digest: str, now: datetime) -> ApiKey:
+        self.session.add(
+            ApiKeyRow(
+                id=key.id,
+                label=key.label,
+                secret_digest=secret_digest,
+                role=key.role,
+                team=key.team,
+                created_at=now,
+                active=key.active,
+            )
+        )
+        return key
+
+    def _of(self, row: ApiKeyRow) -> ApiKey:
+        return ApiKey(
+            id=row.id,
+            label=row.label,
+            role=row.role,
+            team=row.team,
+            active=row.active,
+        )
+
+    def by_digest(self, secret_digest: str) -> ApiKey | None:
+        row = self.session.scalars(
+            select(ApiKeyRow).where(ApiKeyRow.secret_digest == secret_digest)
+        ).first()
+        return None if row is None else self._of(row)
+
+    def get(self, key_id: str) -> ApiKey:
+        row = self.session.get(ApiKeyRow, key_id)
+        if row is None:
+            raise NotFound("api key", key_id)
+        return self._of(row)
+
+    def touch(self, key_id: str, now: datetime) -> None:
+        """Record that a key was used, which is how a stale one is spotted."""
+        row = self.session.get(ApiKeyRow, key_id)
+        if row is not None:
+            row.last_used_at = now
+
+    def deactivate(self, key_id: str) -> ApiKey:
+        row = self.session.get(ApiKeyRow, key_id)
+        if row is None:
+            raise NotFound("api key", key_id)
+        row.active = False
+        return self._of(row)
+
+    def all(self) -> tuple[ApiKey, ...]:
+        rows = self.session.scalars(select(ApiKeyRow).order_by(ApiKeyRow.created_at)).all()
+        return tuple(self._of(row) for row in rows)

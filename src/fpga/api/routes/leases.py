@@ -6,8 +6,10 @@ from datetime import datetime
 
 from fastapi import APIRouter, Body, Depends, Query
 
+from fpga.access import ApiKey
 from fpga.api.deps import get_settings, now, unit_of_work
 from fpga.api.schemas import LeaseIn, LeaseOut
+from fpga.api.security import needs
 from fpga.config import BenchSettings
 from fpga.persistence.unit import UnitOfWork
 from fpga.services import leasing
@@ -52,6 +54,7 @@ def take_board(
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
     settings: BenchSettings = Depends(get_settings),
+    _: ApiKey = Depends(needs("operator")),
 ) -> LeaseOut:
     """Take a board, if it is free and in service."""
     lease = leasing.acquire(
@@ -74,6 +77,7 @@ def release_lease(
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
     reason: str = Query(default="released", description="why it is being given back"),
+    _: ApiKey = Depends(needs("operator")),
 ) -> LeaseOut:
     """Give a board back."""
     return LeaseOut.of(leasing.release(unit, lease_id, moment, reason))
@@ -86,6 +90,7 @@ def renew_lease(
     moment: datetime = Depends(now),
     settings: BenchSettings = Depends(get_settings),
     minutes: int = Body(default=60, embed=True, description="how much longer"),
+    _: ApiKey = Depends(needs("operator")),
 ) -> LeaseOut:
     """Keep a board a bit longer, up to the ceiling."""
     return LeaseOut.of(leasing.renew(unit, lease_id, moment, minutes, settings=settings))

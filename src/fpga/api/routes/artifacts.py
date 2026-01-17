@@ -7,7 +7,9 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Query, Request
 
+from fpga.access import ApiKey
 from fpga.api.deps import get_settings, now, unit_of_work
+from fpga.api.security import needs
 from fpga.artifacts.provenance import Provenance
 from fpga.artifacts.registry import ArtifactStore
 from fpga.bitstream.image import read_bitstream
@@ -74,6 +76,7 @@ def upload_artifact(
     store: ArtifactStore = Depends(artifact_store),
     moment: datetime = Depends(now),
     channel: str = Query(default="dev"),
+    _: ApiKey = Depends(needs("operator")),
 ) -> dict[str, Any]:
     """Take a bit file in, store it, and record what it is."""
     image = read_bitstream(body, source="upload")
@@ -117,6 +120,7 @@ def promote_artifact(
     channel: str = Body(embed=True),
     approvals: list[str] = Body(default_factory=list, embed=True),
     timing_closed: bool | None = Body(default=None, embed=True),
+    _: ApiKey = Depends(needs("admin")),
 ) -> dict[str, Any]:
     """Move an image up a channel, if everything the rules ask for is true."""
     evidence = registry.evidence_from(

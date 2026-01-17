@@ -6,8 +6,10 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 
+from fpga.access import ApiKey
 from fpga.api.deps import now, unit_of_work
 from fpga.api.schemas import JobIn, JobOut
+from fpga.api.security import needs
 from fpga.persistence.unit import UnitOfWork
 from fpga.services import programming
 
@@ -55,6 +57,7 @@ def submit_job(
     asked: JobIn,
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
+    _: ApiKey = Depends(needs("operator")),
 ) -> JobOut:
     """Ask for a board to be programmed."""
     job = programming.submit(
@@ -75,6 +78,7 @@ def cancel_job(
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
     reason: str = Query(default="cancelled", description="why it is being dropped"),
+    _: ApiKey = Depends(needs("operator")),
 ) -> JobOut:
     """Take a job off the queue."""
     return JobOut.of(programming.cancel(unit, job_id, moment, reason))
