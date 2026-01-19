@@ -25,6 +25,7 @@ from fpga.persistence.engine import build_engine, create_schema, session_factory
 from fpga.persistence.repositories import (
     ApiKeyRepository,
     ArtifactRepository,
+    AuditRepository,
     BoardRepository,
     JobRepository,
     LeaseRepository,
@@ -81,6 +82,10 @@ class UnitOfWork:
     @property
     def api_keys(self) -> ApiKeyRepository:
         return ApiKeyRepository(self.session)
+
+    @property
+    def audit(self) -> AuditRepository:
+        return AuditRepository(self.session)
 
     def __enter__(self) -> UnitOfWork:
         self._session = self._factory()

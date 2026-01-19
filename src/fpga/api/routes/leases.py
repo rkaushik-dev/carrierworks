@@ -22,6 +22,7 @@ def list_leases(
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
     holder: str | None = Query(default=None, description="one team rather than all of them"),
+    _: ApiKey = Depends(needs("reader")),
 ) -> list[LeaseOut]:
     """Every lease being held right now."""
     if holder is not None:
@@ -30,7 +31,11 @@ def list_leases(
 
 
 @router.get("/leases/{lease_id}", response_model=LeaseOut)
-def read_lease(lease_id: str, unit: UnitOfWork = Depends(unit_of_work)) -> LeaseOut:
+def read_lease(
+    lease_id: str,
+    unit: UnitOfWork = Depends(unit_of_work),
+    _: ApiKey = Depends(needs("reader")),
+) -> LeaseOut:
     """One lease, live or closed."""
     return LeaseOut.of(unit.leases.get(lease_id))
 
@@ -40,6 +45,7 @@ def read_board_lease(
     tag: str,
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
+    _: ApiKey = Depends(needs("reader")),
 ) -> LeaseOut | None:
     """Whatever holds a board, or nothing when it is free."""
     unit.boards.get(tag)

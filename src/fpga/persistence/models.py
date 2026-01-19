@@ -36,6 +36,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 __all__ = [
     "ApiKeyRow",
     "ArtifactRow",
+    "AuditRow",
     "Base",
     "BoardRow",
     "BoardStateRow",
@@ -332,3 +333,28 @@ class ApiKeyRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class AuditRow(Base):
+    """One thing somebody did, kept whether or not it worked.
+
+    The trail is append only and nothing in the bench deletes from it. Its
+    whole value is answering who took a board at two in the morning, and a
+    table anybody can tidy up cannot answer that.
+    """
+
+    __tablename__ = "audit"
+    __table_args__ = (
+        Index("ix_audit_at", "at"),
+        Index("ix_audit_subject", "subject"),
+        Index("ix_audit_actor", "actor"),
+        CheckConstraint("length(action) > 0", name="ck_audit_action"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    actor: Mapped[str] = mapped_column(_NAME)
+    action: Mapped[str] = mapped_column(String(32))
+    subject: Mapped[str] = mapped_column(_NAME, default="")
+    detail: Mapped[str] = mapped_column(String(240), default="")
+    key_id: Mapped[str] = mapped_column(String(32), default="")

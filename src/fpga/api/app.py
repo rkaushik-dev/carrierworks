@@ -27,8 +27,10 @@ from fpga.errors import (
     ConfigurationError,
     Conflict,
     DeviceMismatch,
+    Forbidden,
     NotFound,
     TransientBenchError,
+    Unauthorized,
     ValidationError,
 )
 from fpga.persistence.unit import BenchDatabase
@@ -41,6 +43,10 @@ __all__ = [
 
 def status_for(error: BenchError) -> int:
     """Which status an error comes back as."""
+    if isinstance(error, Unauthorized):
+        return 401
+    if isinstance(error, Forbidden):
+        return 403
     if isinstance(error, NotFound):
         return 404
     if isinstance(error, Conflict):

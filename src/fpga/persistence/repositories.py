@@ -12,7 +12,7 @@ released lease counts as active.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, selectinload
 from fpga.access import ApiKey
 from fpga.artifacts.provenance import Provenance
 from fpga.artifacts.registry import ArtifactRecord
+from fpga.audit import AuditEntry
 from fpga.errors import NotFound
 from fpga.inventory.boards import Board
 from fpga.inventory.state import BoardState
@@ -40,6 +41,7 @@ from fpga.persistence.mappers import (
 from fpga.persistence.models import (
     ApiKeyRow,
     ArtifactRow,
+    AuditRow,
     BoardRow,
     BoardStateRow,
     JobRow,
@@ -52,6 +54,7 @@ from fpga.records import board_key
 __all__ = [
     "ApiKeyRepository",
     "ArtifactRepository",
+    "AuditRepository",
     "ProvenanceRepository",
     "BoardRepository",
     "JobRepository",
@@ -441,4 +444,55 @@ class ApiKeyRepository:
 
     def all(self) -> tuple[ApiKey, ...]:
         rows = self.session.scalars(select(ApiKeyRow).order_by(ApiKeyRow.created_at)).all()
+        return tuple(self._of(row) for row in rows)
+
+
+class AuditRepository:
+    """The append only trail."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, entry: AuditEntry) -> AuditEntry:
+        self.session.add(
+            AuditRow(
+                at=entry.at,
+                actor=entry.actor,
+                action=entry.action,
+                subject=entry.subject,
+                detail=entry.detail,
+                key_id=entry.key_id,
+            )
+        )
+        return entry
+
+    def _of(self, row: AuditRow) -> AuditEntry:
+        return AuditEntry(
+            at=row.at if row.at.tzinfo is not None else row.at.replace(tzinfo=UTC),
+            actor=row.actor,
+            action=row.action,
+            subject=row.subject,
+            detail=row.detail,
+            key_id=row.key_id,
+        )
+
+    def recent(self, limit: int = 50) -> tuple[AuditEntry, ...]:
+        rows = self.session.scalars(
+            select(AuditRow).order_by(AuditRow.at.desc(), AuditRow.id.desc()).limit(limit)
+        ).all()
+        return tuple(self._of(row) for row in rows)
+
+    def for_subject(self, subject: str, limit: int = 50) -> tuple[AuditEntry, ...]:
+        rows = self.session.scalars(
+            select(AuditRow)
+            .where(AuditRow.subject == subject.strip().lower())
+            .order_by(AuditRow.at.desc(), AuditRow.id.desc())
+            .limit(limit)
+        ).all()
+        return tuple(self._of(row) for row in rows)
+
+    def since(self, when: datetime) -> tuple[AuditEntry, ...]:
+        rows = self.session.scalars(
+            select(AuditRow).where(AuditRow.at >= when).order_by(AuditRow.at, AuditRow.id)
+        ).all()
         return tuple(self._of(row) for row in rows)

@@ -51,6 +51,7 @@ def list_artifacts(
     unit: UnitOfWork = Depends(unit_of_work),
     design: str | None = Query(default=None),
     channel: str | None = Query(default=None),
+    _: ApiKey = Depends(needs("reader")),
 ) -> list[dict[str, Any]]:
     """Images, narrowed by design or by channel."""
     if design is not None:
@@ -64,7 +65,11 @@ def list_artifacts(
 
 
 @router.get("/{digest}")
-def read_artifact(digest: str, unit: UnitOfWork = Depends(unit_of_work)) -> dict[str, Any]:
+def read_artifact(
+    digest: str,
+    unit: UnitOfWork = Depends(unit_of_work),
+    _: ApiKey = Depends(needs("reader")),
+) -> dict[str, Any]:
     """One image's record."""
     return _out(unit.artifacts.get(digest))
 
@@ -95,6 +100,7 @@ def record_build(
     builder: str = Body(default="", embed=True),
     dirty: bool = Body(default=False, embed=True),
     unit: UnitOfWork = Depends(unit_of_work),
+    _: ApiKey = Depends(needs("operator")),
 ) -> dict[str, Any]:
     """Record the build that produced an image."""
     record = unit.artifacts.get(digest)
@@ -134,7 +140,11 @@ def promote_artifact(
 
 
 @router.get("/{digest}/loads")
-def read_loads(digest: str, unit: UnitOfWork = Depends(unit_of_work)) -> dict[str, int]:
+def read_loads(
+    digest: str,
+    unit: UnitOfWork = Depends(unit_of_work),
+    _: ApiKey = Depends(needs("reader")),
+) -> dict[str, int]:
     """How many times this image has been loaded, and how often that failed."""
     unit.artifacts.get(digest)
     passed, failed = registry.counted_loads(unit, digest)

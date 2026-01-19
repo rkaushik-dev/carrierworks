@@ -51,6 +51,7 @@ def list_boards(
     unit: UnitOfWork = Depends(unit_of_work),
     available: bool = Query(default=False, description="only boards nobody is using"),
     rack: str | None = Query(default=None, description="one rack rather than the whole bench"),
+    _: ApiKey = Depends(needs("reader")),
 ) -> list[BoardOut]:
     """Every board, or the ones a filter asks for."""
     if rack is not None:
@@ -61,7 +62,11 @@ def list_boards(
 
 
 @router.get("/{tag}", response_model=BoardOut)
-def read_board(tag: str, unit: UnitOfWork = Depends(unit_of_work)) -> BoardOut:
+def read_board(
+    tag: str,
+    unit: UnitOfWork = Depends(unit_of_work),
+    _: ApiKey = Depends(needs("reader")),
+) -> BoardOut:
     """One board, with the state it is in."""
     return BoardOut.of(unit.boards.get(tag), unit.boards.state(tag))
 

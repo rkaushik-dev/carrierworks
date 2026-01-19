@@ -21,6 +21,7 @@ def list_jobs(
     unit: UnitOfWork = Depends(unit_of_work),
     state: str | None = Query(default=None, description="queued, running, passed, failed"),
     digest: str | None = Query(default=None, description="one image"),
+    _: ApiKey = Depends(needs("reader")),
 ) -> list[JobOut]:
     """Jobs, narrowed by state or by image."""
     if digest is not None:
@@ -41,13 +42,18 @@ def list_jobs(
 def list_ready(
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
+    _: ApiKey = Depends(needs("operator")),
 ) -> list[JobOut]:
     """The jobs a worker could start right now, oldest first."""
     return [JobOut.of(job) for job in programming.ready(unit, moment)]
 
 
 @router.get("/jobs/{job_id}", response_model=JobOut)
-def read_job(job_id: str, unit: UnitOfWork = Depends(unit_of_work)) -> JobOut:
+def read_job(
+    job_id: str,
+    unit: UnitOfWork = Depends(unit_of_work),
+    _: ApiKey = Depends(needs("reader")),
+) -> JobOut:
     """One job."""
     return JobOut.of(unit.jobs.get(job_id))
 
@@ -85,7 +91,11 @@ def cancel_job(
 
 
 @router.get("/boards/{tag}/jobs", response_model=list[JobOut])
-def board_jobs(tag: str, unit: UnitOfWork = Depends(unit_of_work)) -> list[JobOut]:
+def board_jobs(
+    tag: str,
+    unit: UnitOfWork = Depends(unit_of_work),
+    _: ApiKey = Depends(needs("reader")),
+) -> list[JobOut]:
     """Everything that has been asked of one board."""
     unit.boards.get(tag)
     return [JobOut.of(job) for job in programming.for_board(unit, tag)]
