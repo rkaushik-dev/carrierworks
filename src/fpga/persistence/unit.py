@@ -27,6 +27,7 @@ from fpga.persistence.repositories import (
     ArtifactRepository,
     AuditRepository,
     BoardRepository,
+    BuildReportRepository,
     JobRepository,
     LeaseRepository,
     ProvenanceRepository,
@@ -86,6 +87,10 @@ class UnitOfWork:
     @property
     def audit(self) -> AuditRepository:
         return AuditRepository(self.session)
+
+    @property
+    def reports(self) -> BuildReportRepository:
+        return BuildReportRepository(self.session)
 
     def __enter__(self) -> UnitOfWork:
         self._session = self._factory()

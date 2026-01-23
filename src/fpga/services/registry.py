@@ -25,6 +25,7 @@ from fpga.bitstream.image import Bitstream
 from fpga.errors import Conflict, NotFound
 from fpga.jobs.store import JobStore
 from fpga.persistence.unit import UnitOfWork
+from fpga.services import reports
 
 __all__ = [
     "counted_loads",
@@ -108,10 +109,17 @@ def evidence_from(
     timing_closed: bool | None = None,
     approvals: tuple[str, ...] = (),
 ) -> PromotionEvidence:
-    """The evidence a promotion reads, out of the database and the caller."""
+    """The evidence a promotion reads, out of the database and the caller.
+
+    Timing comes from the stored build report when there is one. The argument
+    is only a fallback for a site that does not upload reports at all, and it
+    is deliberately the weaker source: a caller can claim anything.
+    """
+    stored_closed, stored_slack = reports.timing_for(unit, digest)
     passed, failed = counted_loads(unit, digest)
     return PromotionEvidence(
-        timing_closed=timing_closed,
+        timing_closed=stored_closed if stored_closed is not None else timing_closed,
+        worst_slack_ps=stored_slack,
         successful_loads=passed,
         failed_loads=failed,
         approvals=tuple(sorted(set(approvals))),

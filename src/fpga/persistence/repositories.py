@@ -44,17 +44,22 @@ from fpga.persistence.models import (
     AuditRow,
     BoardRow,
     BoardStateRow,
+    BuildReportRow,
     JobRow,
     LeaseRow,
     ProvenanceRow,
     SlotRow,
 )
 from fpga.records import board_key
+from fpga.reports.baselines import BuildReport
+from fpga.reports.timing import TimingSummary
+from fpga.reports.utilization import SiteUsage, Utilization
 
 __all__ = [
     "ApiKeyRepository",
     "ArtifactRepository",
     "AuditRepository",
+    "BuildReportRepository",
     "ProvenanceRepository",
     "BoardRepository",
     "JobRepository",
@@ -496,3 +501,117 @@ class AuditRepository:
             select(AuditRow).where(AuditRow.at >= when).order_by(AuditRow.at, AuditRow.id)
         ).all()
         return tuple(self._of(row) for row in rows)
+
+
+class BuildReportRepository:
+    """The numbers out of each build's timing and utilization reports."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, report: BuildReport, *, read_at: datetime) -> BuildReport:
+        self.session.add(
+            BuildReportRow(
+                digest=report.digest,
+                design=report.design,
+                read_at=read_at,
+                wns_ps=report.timing.wns_ps,
+                tns_ps=report.timing.tns_ps,
+                setup_failing=report.timing.setup_failing,
+                setup_total=report.timing.setup_total,
+                whs_ps=report.timing.whs_ps,
+                ths_ps=report.timing.ths_ps,
+                hold_failing=report.timing.hold_failing,
+                hold_total=report.timing.hold_total,
+                luts=report.utilization.luts,
+                registers=report.utilization.registers,
+                block_ram=report.utilization.block_ram,
+                dsp=report.utilization.dsp,
+            )
+        )
+        return report
+
+    def _of(self, row: BuildReportRow) -> BuildReport:
+        """Back out of the row, with the utilization rows rebuilt.
+
+        The report only stores the four counts the bench compares on, so the
+        available column is not kept and the rebuilt rows carry the used count
+        as their own capacity. Percentages off a rebuilt report are therefore
+        meaningless, which is why the comparison reads the counts.
+        """
+        timing = TimingSummary(
+            wns_ps=row.wns_ps,
+            tns_ps=row.tns_ps,
+            setup_failing=row.setup_failing,
+            setup_total=row.setup_total,
+            whs_ps=row.whs_ps,
+            ths_ps=row.ths_ps,
+            hold_failing=row.hold_failing,
+            hold_total=row.hold_total,
+            design=row.design,
+        )
+        utilization = Utilization(
+            rows=(
+                SiteUsage(name="Slice LUTs", used=row.luts, available=max(row.luts, 1)),
+                SiteUsage(
+                    name="Slice Registers",
+                    used=row.registers,
+                    available=max(row.registers, 1),
+                ),
+                SiteUsage(
+                    name="Block RAM Tile",
+                    used=row.block_ram,
+                    available=max(row.block_ram, 1),
+                ),
+                SiteUsage(name="DSPs", used=row.dsp, available=max(row.dsp, 1)),
+            ),
+            design=row.design,
+        )
+        return BuildReport(
+            digest=row.digest,
+            design=row.design,
+            at=row.read_at if row.read_at.tzinfo is not None else row.read_at.replace(tzinfo=UTC),
+            timing=timing,
+            utilization=utilization,
+        )
+
+    def for_digest(self, digest: str) -> BuildReport | None:
+        row = self.session.scalars(
+            select(BuildReportRow).where(BuildReportRow.digest == digest)
+        ).first()
+        return None if row is None else self._of(row)
+
+    def for_design(self, design: str) -> tuple[BuildReport, ...]:
+        rows = self.session.scalars(
+            select(BuildReportRow)
+            .where(BuildReportRow.design == design.strip().lower())
+            .order_by(BuildReportRow.read_at)
+        ).all()
+        return tuple(self._of(row) for row in rows)
+
+    def baseline(self, design: str) -> BuildReport | None:
+        row = self.session.scalars(
+            select(BuildReportRow).where(
+                BuildReportRow.design == design.strip().lower(),
+                BuildReportRow.is_baseline.is_(True),
+            )
+        ).first()
+        return None if row is None else self._of(row)
+
+    def set_baseline(self, digest: str) -> BuildReport:
+        """Pin one build as the design's baseline, unpinning whatever was.
+
+        One baseline per design, so the old one is cleared in the same
+        transaction. Two baselines would make a regression report depend on
+        which row came back first.
+        """
+        row = self.session.scalars(
+            select(BuildReportRow).where(BuildReportRow.digest == digest)
+        ).first()
+        if row is None:
+            raise NotFound("build report", digest)
+        for other in self.session.scalars(
+            select(BuildReportRow).where(BuildReportRow.design == row.design)
+        ).all():
+            other.is_baseline = other.digest == digest
+        return self._of(row)

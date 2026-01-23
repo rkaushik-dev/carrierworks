@@ -19,6 +19,8 @@ from fpga.inventory.boards import Board
 from fpga.inventory.state import BoardState
 from fpga.leases.models import Lease
 from fpga.persistence.unit import UnitOfWork
+from fpga.records import board_key
+from fpga.services import audit
 
 __all__ = [
     "add_board",
@@ -91,6 +93,14 @@ def move_state(
     current = unit.boards.state(tag)
     moved = current.move(to_state, now, reason=reason, actor=actor)
     unit.boards.save_state(tag, moved)
+    audit.record(
+        unit,
+        now,
+        "board-state",
+        actor=actor or "bench",
+        subject=board_key(tag),
+        detail=f"{current.state} to {moved.state} {reason}".strip(),
+    )
     return moved
 
 
@@ -113,6 +123,14 @@ def fault_board(
         return (current, released)
     moved = current.move("faulted", now, reason=reason, actor=actor)
     unit.boards.save_state(tag, moved)
+    audit.record(
+        unit,
+        now,
+        "board-faulted",
+        actor=actor,
+        subject=board_key(tag),
+        detail=reason,
+    )
     return (moved, released)
 
 

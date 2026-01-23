@@ -17,6 +17,7 @@ from fpga.config import BenchSettings
 from fpga.errors import Conflict, ValidationError
 from fpga.leases.models import Lease
 from fpga.persistence.unit import UnitOfWork
+from fpga.services import audit
 
 __all__ = [
     "acquire",
@@ -89,6 +90,14 @@ def acquire(
     )
     unit.leases.add(lease)
     unit.boards.save_state(tag, state.move("leased", now, actor=lease.holder))
+    audit.record(
+        unit,
+        now,
+        "lease-taken",
+        actor=lease.holder,
+        subject=lease.board,
+        detail=f"{lease.id} for {lease.purpose}",
+    )
     return lease
 
 
@@ -103,6 +112,14 @@ def release(unit: UnitOfWork, lease_id: str, now: datetime, reason: str = "relea
         unit.boards.save_state(lease.board, state)
     if state.state == "leased":
         unit.boards.save_state(lease.board, state.move("available", now, actor=lease.holder))
+    audit.record(
+        unit,
+        now,
+        "lease-released",
+        actor=lease.holder,
+        subject=lease.board,
+        detail=f"{lease.id} {reason}",
+    )
     return closed
 
 
