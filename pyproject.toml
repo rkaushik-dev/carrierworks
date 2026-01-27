@@ -16,7 +16,11 @@ dependencies = [
   "fastapi==0.115.8",
   "pydantic==2.10.6",
   "uvicorn[standard]==0.34.0",
+  "click==8.1.8",
 ]
+
+[project.scripts]
+fpga = "fpga.cli.main:run"
 
 [project.optional-dependencies]
 dev = [
@@ -60,6 +64,8 @@ select = ["E", "F", "I", "B", "UP", "C4", "SIM", "RET"]
 # would test a file no build has ever produced.
 "tests/test_timing.py" = ["B018", "E501"]
 "tests/test_utilization.py" = ["B018", "E501"]
+"tests/test_api_reports.py" = ["B018", "B008", "E501"]
+"tests/test_cli_images.py" = ["B018", "B008", "E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["fpga"]
