@@ -221,6 +221,6 @@ def run() -> None:  # pragma: no cover - the console script entry point
     something has to import them. Doing it here rather than at the top of this
     module keeps the import graph acyclic: they import this for the context.
     """
-    from fpga.cli import leases  # noqa: F401
+    from fpga.cli import images, leases  # noqa: F401
 
     cli()
