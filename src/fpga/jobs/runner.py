@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol, runtime_checkable
 
 from fpga.artifacts.registry import ArtifactRecord, ArtifactStore
 from fpga.catalog.flashparts import FlashSpec
@@ -31,21 +32,59 @@ from fpga.errors import BenchError, NotFound, TransientBenchError
 from fpga.flash.layout import FlashLayout, multiboot_layout
 from fpga.flash.plan import plan_write
 from fpga.flash.wear import WearLedger
-from fpga.inventory.book import BoardBook
+from fpga.inventory.boards import Board
 from fpga.inventory.faults import FaultLog
+from fpga.inventory.state import BoardState
 from fpga.jobs.flasher import SpiFlashDriver, write_image
 from fpga.jobs.gates import check_job
 from fpga.jobs.journal import JobJournal
 from fpga.jobs.models import ProgramJob
 from fpga.jobs.programmer import load_over_jtag
 from fpga.jtag.session import ScanSession
-from fpga.leases.store import LeaseStore
+from fpga.leases.models import Lease
 
 __all__ = [
+    "BoardRegistry",
     "JobRunner",
+    "LeaseRegistry",
     "RunResult",
     "flash_layout",
 ]
+
+
+@runtime_checkable
+class BoardRegistry(Protocol):
+    """The four things the runner asks of an inventory.
+
+    A protocol rather than the board book itself, because the runner is used
+    both against the in memory book in the tests and against the database in
+    the service, and neither of those should have to know about the other.
+    """
+
+    def has(self, tag: str) -> bool: ...
+
+    def board(self, tag: str) -> Board: ...
+
+    def state(self, tag: str) -> BoardState: ...
+
+    def move_to(
+        self,
+        tag: str,
+        to_state: str,
+        when: datetime,
+        *,
+        reason: str = ...,
+        actor: str = ...,
+    ) -> BoardState: ...
+
+
+@runtime_checkable
+class LeaseRegistry(Protocol):
+    """The two things the runner asks of the leases."""
+
+    def for_board(self, tag: str, now: datetime) -> Lease | None: ...
+
+    def release(self, lease_id: str, now: datetime, reason: str = ...) -> Lease: ...
 
 
 def flash_layout(spec: FlashSpec) -> FlashLayout:
@@ -84,8 +123,8 @@ class JobRunner:
     def __init__(
         self,
         store: ArtifactStore,
-        book: BoardBook,
-        leases: LeaseStore,
+        book: BoardRegistry,
+        leases: LeaseRegistry,
         journal: JobJournal,
         faults: FaultLog,
         *,
