@@ -68,6 +68,7 @@ class BenchSettings:
     database_url: str = "sqlite+pysqlite:///bench.db"
     artifact_root: Path = Path("var/artifacts")
     journal_root: Path = Path("var/journal")
+    wear_ledger: Path = Path("var/wear.json")
     site: str = "lab-a"
     default_lease_minutes: int = 60
     max_lease_minutes: int = 480
@@ -134,6 +135,7 @@ class BenchSettings:
             database_url=_as_text(values, "database_url", defaults.database_url),
             artifact_root=Path(_as_text(values, "artifact_root", str(defaults.artifact_root))),
             journal_root=Path(_as_text(values, "journal_root", str(defaults.journal_root))),
+            wear_ledger=Path(_as_text(values, "wear_ledger", str(defaults.wear_ledger))),
             site=_as_text(values, "site", defaults.site),
             default_lease_minutes=_as_int(
                 values, "default_lease_minutes", defaults.default_lease_minutes
