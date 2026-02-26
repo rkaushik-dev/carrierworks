@@ -23,11 +23,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from fpga.inventory.book import BoardBook
-from fpga.leases.store import LeaseStore
 from fpga.locations import downwind_of
 from fpga.power.pdu import PowerController
 from fpga.records import describe_tally, tally
+from fpga.registries import BoardRegistry, LeaseRegistry
 from fpga.thermal.alarms import UNKNOWN, AlarmBook, ThermalStatus
 from fpga.thermal.samples import ThermalLog
 
@@ -58,9 +57,9 @@ class ThermalSupervisor:
 
     def __init__(
         self,
-        book: BoardBook,
+        book: BoardRegistry,
         alarms: AlarmBook,
-        leases: LeaseStore,
+        leases: LeaseRegistry,
         power: PowerController | None = None,
         *,
         unknown_grace: timedelta = timedelta(minutes=5),
