@@ -49,11 +49,13 @@ from fpga.persistence.models import (
     LeaseRow,
     ProvenanceRow,
     SlotRow,
+    ThermalRow,
 )
 from fpga.records import board_key
 from fpga.reports.baselines import BuildReport
 from fpga.reports.timing import TimingSummary
 from fpga.reports.utilization import SiteUsage, Utilization
+from fpga.thermal.samples import ThermalLog, ThermalSample
 
 __all__ = [
     "ApiKeyRepository",
@@ -64,6 +66,7 @@ __all__ = [
     "BoardRepository",
     "JobRepository",
     "LeaseRepository",
+    "ThermalRepository",
 ]
 
 
@@ -615,3 +618,70 @@ class BuildReportRepository:
         ).all():
             other.is_baseline = other.digest == digest
         return self._of(row)
+
+
+class ThermalRepository:
+    """Temperature readings, written one at a time and read in windows."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def record(self, sample: ThermalSample) -> ThermalSample:
+        self.session.add(
+            ThermalRow(
+                board=sample.board,
+                at=sample.at,
+                millidegrees=sample.millidegrees,
+                source=sample.source,
+            )
+        )
+        return sample
+
+    def _of(self, row: ThermalRow) -> ThermalSample:
+        return ThermalSample(
+            board=row.board,
+            at=row.at if row.at.tzinfo is not None else row.at.replace(tzinfo=UTC),
+            millidegrees=row.millidegrees,
+            source=row.source,
+        )
+
+    def latest(self, board: str) -> ThermalSample | None:
+        row = self.session.scalars(
+            select(ThermalRow)
+            .where(ThermalRow.board == board.strip().lower())
+            .order_by(ThermalRow.at.desc(), ThermalRow.id.desc())
+            .limit(1)
+        ).first()
+        return None if row is None else self._of(row)
+
+    def since(self, when: datetime, board: str | None = None) -> tuple[ThermalSample, ...]:
+        query = select(ThermalRow).where(ThermalRow.at >= when)
+        if board is not None:
+            query = query.where(ThermalRow.board == board.strip().lower())
+        rows = self.session.scalars(query.order_by(ThermalRow.at, ThermalRow.id)).all()
+        return tuple(self._of(row) for row in rows)
+
+    def load(self, since: datetime, *, keep: int = 512) -> ThermalLog:
+        """Every reading since a moment, back in a log the supervisor can read.
+
+        The log is the same one the in memory bench uses, so nothing above
+        this line knows whether the readings came from a database or from a
+        poller that has been running for ten minutes.
+        """
+        log = ThermalLog(keep=keep)
+        for sample in self.since(since):
+            log.record(sample)
+        return log
+
+    def prune(self, before: datetime) -> int:
+        """Drop everything older than a moment, and say how many that was."""
+        rows = self.session.scalars(select(ThermalRow).where(ThermalRow.at < before)).all()
+        for row in rows:
+            self.session.delete(row)
+        return len(rows)
+
+    def count(self, board: str | None = None) -> int:
+        query = select(ThermalRow)
+        if board is not None:
+            query = query.where(ThermalRow.board == board.strip().lower())
+        return len(self.session.scalars(query).all())

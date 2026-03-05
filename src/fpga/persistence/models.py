@@ -45,6 +45,7 @@ __all__ = [
     "LeaseRow",
     "ProvenanceRow",
     "SlotRow",
+    "ThermalRow",
 ]
 
 _TAG = String(12)
@@ -358,3 +359,27 @@ class AuditRow(Base):
     subject: Mapped[str] = mapped_column(_NAME, default="")
     detail: Mapped[str] = mapped_column(String(240), default="")
     key_id: Mapped[str] = mapped_column(String(32), default="")
+
+
+class ThermalRow(Base):
+    """One temperature reading off one board.
+
+    The highest volume table on the bench by a wide margin: every board is
+    polled every twenty seconds, so a full rack writes about four thousand
+    rows an hour. It is written to constantly and read in windows, which is
+    why the only index is the one a window query uses, and why the sweep that
+    drops old rows is part of the same service rather than a cron job nobody
+    remembers.
+    """
+
+    __tablename__ = "thermal_samples"
+    __table_args__ = (
+        Index("ix_thermal_board_at", "board", "at"),
+        CheckConstraint("millidegrees between -60000 and 200000", name="ck_thermal_range"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    board: Mapped[str] = mapped_column(_TAG, ForeignKey("boards.tag", ondelete="CASCADE"))
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    millidegrees: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String(16), default="sysmon")

@@ -31,6 +31,7 @@ from fpga.persistence.repositories import (
     JobRepository,
     LeaseRepository,
     ProvenanceRepository,
+    ThermalRepository,
 )
 
 __all__ = [
@@ -91,6 +92,10 @@ class UnitOfWork:
     @property
     def reports(self) -> BuildReportRepository:
         return BuildReportRepository(self.session)
+
+    @property
+    def thermal(self) -> ThermalRepository:
+        return ThermalRepository(self.session)
 
     def __enter__(self) -> UnitOfWork:
         self._session = self._factory()
