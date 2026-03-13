@@ -77,14 +77,20 @@ def status_of(
     settings: BenchSettings | None = None,
     window: timedelta = timedelta(minutes=15),
 ) -> tuple[ThermalStatus, ...]:
-    """Where every board stands, worst first, without acting on any of it."""
+    """Where every board stands, worst first, without acting on any of it.
+
+    Every board on the bench gets a line, including the ones that have not
+    reported at all. A board missing from the answer looks like a board that
+    is fine, and the silent ones are the ones worth looking at.
+    """
     settings = settings or BenchSettings()
     log = load_window(unit, now, window)
     alarms = AlarmBook(
         limits_for(unit),
         stale_after=timedelta(seconds=settings.thermal_stale_seconds),
     )
-    alarms.update_all(log, now)
+    for board in unit.boards.all():
+        alarms.update(board.tag, log, now)
     return alarms.worst_first()
 
 
