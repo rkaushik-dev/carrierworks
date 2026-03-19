@@ -21,6 +21,9 @@ from fpga.inventory.boards import Board
 from fpga.inventory.state import BoardState
 from fpga.jobs.models import ProgramJob
 from fpga.leases.models import Lease
+from fpga.thermal.alarms import ThermalStatus
+from fpga.thermal.samples import ThermalSample
+from fpga.thermal.supervisor import SupervisorAction
 
 __all__ = [
     "BoardIn",
@@ -29,8 +32,12 @@ __all__ = [
     "JobOut",
     "LeaseIn",
     "LeaseOut",
+    "SampleIn",
+    "SampleOut",
     "SlotIn",
     "StateIn",
+    "StatusOut",
+    "SupervisorActionOut",
 ]
 
 
@@ -195,4 +202,80 @@ class JobOut(BaseModel):
             finished_at=job.finished_at,
             error=job.error,
             error_code=job.error_code,
+        )
+
+
+class SampleIn(BaseModel):
+    """One reading a rack controller is posting.
+
+    The time is optional because the common case is a controller posting what
+    it just read, and the server clock is the one everything else on the bench
+    is stamped with. A controller replaying a backlog sends its own times.
+    """
+
+    board: str
+    millidegrees: int
+    at: datetime | None = None
+    source: str = "sysmon"
+
+
+class SampleOut(BaseModel):
+    """A stored reading on the way out."""
+
+    board: str
+    at: datetime
+    millidegrees: int
+    celsius: float
+    source: str
+
+    @classmethod
+    def of(cls, sample: ThermalSample) -> SampleOut:
+        return cls(
+            board=sample.board,
+            at=sample.at,
+            millidegrees=sample.millidegrees,
+            celsius=sample.millidegrees / 1000,
+            source=sample.source,
+        )
+
+
+class StatusOut(BaseModel):
+    """Where one board stands thermally."""
+
+    board: str
+    state: str
+    since: datetime
+    held_for_seconds: int
+    millidegrees: int | None = None
+    stale: bool = False
+    alarming: bool = False
+
+    @classmethod
+    def of(cls, status: ThermalStatus, moment: datetime) -> StatusOut:
+        return cls(
+            board=status.board,
+            state=status.state,
+            since=status.since,
+            held_for_seconds=int(status.held_for(moment).total_seconds()),
+            millidegrees=status.millidegrees,
+            stale=status.stale,
+            alarming=status.alarming,
+        )
+
+
+class SupervisorActionOut(BaseModel):
+    """Something the supervisor did on a pass."""
+
+    board: str
+    action: str
+    reason: str
+    affected: list[str] = []
+
+    @classmethod
+    def of(cls, action: SupervisorAction) -> SupervisorActionOut:
+        return cls(
+            board=action.board,
+            action=action.action,
+            reason=action.reason,
+            affected=list(action.affected),
         )
