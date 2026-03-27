@@ -44,6 +44,7 @@ __all__ = [
     "JobRow",
     "LeaseRow",
     "ProvenanceRow",
+    "RequestRow",
     "SlotRow",
     "ThermalRow",
 ]
@@ -383,3 +384,34 @@ class ThermalRow(Base):
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     millidegrees: Mapped[int] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String(16), default="sysmon")
+
+
+class RequestRow(Base):
+    """Somebody waiting for a board they have not got yet.
+
+    The requirements are kept as the text they were written as rather than as
+    a parsed structure, because that text is what the person typed and it is
+    what they will be shown when the request is refused. Parsing it back is
+    cheap and lossless; storing the parse is neither.
+    """
+
+    __tablename__ = "requests"
+    __table_args__ = (
+        Index("ix_requests_open", "satisfied_at", "cancelled_at"),
+        Index("ix_requests_holder", "holder"),
+        CheckConstraint("priority between 1 and 9", name="ck_requests_priority"),
+        CheckConstraint("minutes > 0", name="ck_requests_minutes"),
+    )
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    holder: Mapped[str] = mapped_column(_NAME)
+    purpose: Mapped[str] = mapped_column(String(120))
+    requirements: Mapped[str] = mapped_column(String(500), default="")
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    priority: Mapped[int] = mapped_column(Integer, default=5)
+    minutes: Mapped[int] = mapped_column(Integer, default=60)
+    preemptible: Mapped[bool] = mapped_column(Boolean, default=True)
+    needs_hands: Mapped[bool] = mapped_column(Boolean, default=False)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    satisfied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_board: Mapped[str] = mapped_column(_TAG, default="")

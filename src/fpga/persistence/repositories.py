@@ -21,6 +21,7 @@ from fpga.access import ApiKey
 from fpga.artifacts.provenance import Provenance
 from fpga.artifacts.registry import ArtifactRecord
 from fpga.audit import AuditEntry
+from fpga.capabilities import RequirementSet
 from fpga.errors import NotFound
 from fpga.inventory.boards import Board
 from fpga.inventory.state import BoardState
@@ -48,6 +49,7 @@ from fpga.persistence.models import (
     JobRow,
     LeaseRow,
     ProvenanceRow,
+    RequestRow,
     SlotRow,
     ThermalRow,
 )
@@ -55,6 +57,7 @@ from fpga.records import board_key
 from fpga.reports.baselines import BuildReport
 from fpga.reports.timing import TimingSummary
 from fpga.reports.utilization import SiteUsage, Utilization
+from fpga.scheduling.queue import Request
 from fpga.thermal.samples import ThermalLog, ThermalSample
 
 __all__ = [
@@ -63,6 +66,7 @@ __all__ = [
     "AuditRepository",
     "BuildReportRepository",
     "ProvenanceRepository",
+    "RequestRepository",
     "BoardRepository",
     "JobRepository",
     "LeaseRepository",
@@ -685,3 +689,117 @@ class ThermalRepository:
         if board is not None:
             query = query.where(ThermalRow.board == board.strip().lower())
         return len(self.session.scalars(query).all())
+
+
+def _aware(when: datetime) -> datetime:
+    """A stored timestamp with its zone back on, for the sqlite that drops it."""
+    return when if when.tzinfo is not None else when.replace(tzinfo=UTC)
+
+
+class RequestRepository:
+    """The waiting list, ordered the way the dispatcher serves it."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def next_id(self) -> str:
+        """The next request number, carried on from what is already stored."""
+        highest = 0
+        for row in self.session.scalars(select(RequestRow)).all():
+            tail = row.id.rsplit("-", 1)[-1]
+            if tail.isdigit():
+                highest = max(highest, int(tail))
+        return f"req-{highest + 1:04d}"
+
+    def _row(self, request_id: str) -> RequestRow:
+        row = self.session.get(RequestRow, request_id.strip().lower())
+        if row is None:
+            raise NotFound("request", request_id)
+        return row
+
+    def _of(self, row: RequestRow) -> Request:
+        return Request(
+            id=row.id,
+            holder=row.holder,
+            purpose=row.purpose,
+            requirements=RequirementSet.parse(row.requirements),
+            submitted_at=_aware(row.submitted_at),
+            priority=row.priority,
+            minutes=row.minutes,
+            preemptible=row.preemptible,
+            needs_hands=row.needs_hands,
+            cancelled_at=None if row.cancelled_at is None else _aware(row.cancelled_at),
+            satisfied_at=None if row.satisfied_at is None else _aware(row.satisfied_at),
+        )
+
+    def add(self, request: Request, *, board: str = "") -> Request:
+        self.session.add(
+            RequestRow(
+                id=request.id,
+                holder=request.holder,
+                purpose=request.purpose,
+                requirements=",".join(item.text for item in request.requirements),
+                submitted_at=request.submitted_at,
+                priority=request.priority,
+                minutes=request.minutes,
+                preemptible=request.preemptible,
+                needs_hands=request.needs_hands,
+                cancelled_at=request.cancelled_at,
+                satisfied_at=request.satisfied_at,
+                assigned_board=board,
+            )
+        )
+        self.session.flush()
+        return request
+
+    def get(self, request_id: str) -> Request:
+        return self._of(self._row(request_id))
+
+    def save(self, request: Request, *, board: str | None = None) -> Request:
+        row = self._row(request.id)
+        row.cancelled_at = request.cancelled_at
+        row.satisfied_at = request.satisfied_at
+        row.priority = request.priority
+        row.minutes = request.minutes
+        if board is not None:
+            row.assigned_board = board
+        self.session.flush()
+        return request
+
+    def board_for(self, request_id: str) -> str:
+        """Which board a satisfied request got, or nothing while it waits."""
+        return self._row(request_id).assigned_board
+
+    def all(self) -> tuple[Request, ...]:
+        rows = self.session.scalars(select(RequestRow).order_by(RequestRow.submitted_at)).all()
+        return tuple(self._of(row) for row in rows)
+
+    def open(self) -> tuple[Request, ...]:
+        rows = self.session.scalars(
+            select(RequestRow)
+            .where(RequestRow.satisfied_at.is_(None), RequestRow.cancelled_at.is_(None))
+            .order_by(RequestRow.submitted_at)
+        ).all()
+        return tuple(self._of(row) for row in rows)
+
+    def for_holder(self, holder: str) -> tuple[Request, ...]:
+        rows = self.session.scalars(
+            select(RequestRow)
+            .where(RequestRow.holder == holder.strip().lower())
+            .order_by(RequestRow.submitted_at)
+        ).all()
+        return tuple(self._of(row) for row in rows)
+
+    def ordered(self, now: datetime) -> tuple[Request, ...]:
+        """Open requests, highest priority first and longest waiting next."""
+        waiting = self.open()
+        return tuple(
+            sorted(
+                waiting,
+                key=lambda request: (
+                    request.priority,
+                    -request.waited(now).total_seconds(),
+                    request.submitted_at,
+                ),
+            )
+        )

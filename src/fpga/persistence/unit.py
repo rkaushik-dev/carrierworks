@@ -31,6 +31,7 @@ from fpga.persistence.repositories import (
     JobRepository,
     LeaseRepository,
     ProvenanceRepository,
+    RequestRepository,
     ThermalRepository,
 )
 
@@ -92,6 +93,10 @@ class UnitOfWork:
     @property
     def reports(self) -> BuildReportRepository:
         return BuildReportRepository(self.session)
+
+    @property
+    def requests(self) -> RequestRepository:
+        return RequestRepository(self.session)
 
     @property
     def thermal(self) -> ThermalRepository:
