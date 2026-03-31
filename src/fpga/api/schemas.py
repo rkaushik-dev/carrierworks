@@ -21,17 +21,23 @@ from fpga.inventory.boards import Board
 from fpga.inventory.state import BoardState
 from fpga.jobs.models import ProgramJob
 from fpga.leases.models import Lease
+from fpga.scheduling.queue import Request
+from fpga.services.scheduling import DispatchOutcome
 from fpga.thermal.alarms import ThermalStatus
 from fpga.thermal.samples import ThermalSample
 from fpga.thermal.supervisor import SupervisorAction
 
 __all__ = [
+    "AssignmentOut",
     "BoardIn",
     "BoardOut",
+    "DispatchOut",
     "JobIn",
     "JobOut",
     "LeaseIn",
     "LeaseOut",
+    "RequestIn",
+    "RequestOut",
     "SampleIn",
     "SampleOut",
     "SlotIn",
@@ -278,4 +284,92 @@ class SupervisorActionOut(BaseModel):
             action=action.action,
             reason=action.reason,
             affected=list(action.affected),
+        )
+
+
+class RequestIn(BaseModel):
+    """Somebody asking for a board they have not got yet."""
+
+    holder: str
+    purpose: str
+    needs: str = ""
+    priority: int = Field(default=5, ge=1, le=9)
+    minutes: int = Field(default=60, gt=0)
+    preemptible: bool = True
+    needs_hands: bool = False
+
+
+class RequestOut(BaseModel):
+    """A request on the way out, with where it stands."""
+
+    id: str
+    holder: str
+    purpose: str
+    needs: list[str]
+    submitted_at: datetime
+    priority: int
+    minutes: int
+    preemptible: bool
+    needs_hands: bool
+    state: str
+    waited_seconds: int
+    place: int | None = None
+    board: str = ""
+
+    @classmethod
+    def of(
+        cls,
+        request: Request,
+        moment: datetime,
+        *,
+        board: str = "",
+        place: int | None = None,
+    ) -> RequestOut:
+        return cls(
+            id=request.id,
+            holder=request.holder,
+            purpose=request.purpose,
+            needs=[item.text for item in request.requirements],
+            submitted_at=request.submitted_at,
+            priority=request.priority,
+            minutes=request.minutes,
+            preemptible=request.preemptible,
+            needs_hands=request.needs_hands,
+            state=_request_state(request),
+            waited_seconds=int(request.waited(moment).total_seconds()),
+            place=place,
+            board=board,
+        )
+
+
+def _request_state(request: Request) -> str:
+    if request.satisfied_at is not None:
+        return "served"
+    if request.cancelled_at is not None:
+        return "cancelled"
+    return "waiting"
+
+
+class AssignmentOut(BaseModel):
+    """One request that got a board."""
+
+    request: str
+    board: str
+    lease: str
+
+
+class DispatchOut(BaseModel):
+    """What one pass over the line did."""
+
+    assigned: list[AssignmentOut]
+    waiting: dict[str, str]
+
+    @classmethod
+    def of(cls, outcome: DispatchOutcome) -> DispatchOut:
+        return cls(
+            assigned=[
+                AssignmentOut(request=request, board=board, lease=lease)
+                for request, board, lease in outcome.assigned
+            ],
+            waiting=outcome.refusals,
         )
