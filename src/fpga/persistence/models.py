@@ -43,6 +43,7 @@ __all__ = [
     "BuildReportRow",
     "JobRow",
     "LeaseRow",
+    "MaintenanceRow",
     "ProvenanceRow",
     "RequestRow",
     "SlotRow",
@@ -415,3 +416,29 @@ class RequestRow(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     satisfied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     assigned_board: Mapped[str] = mapped_column(_TAG, default="")
+
+
+class MaintenanceRow(Base):
+    """One visit to a board with a screwdriver or a reference source.
+
+    Kept forever, like the audit trail, and for the same reason: the question
+    it answers is when a board was last calibrated, and a table somebody can
+    tidy up cannot answer that a year later. Faults cleared is on the row
+    rather than derived, because clearing a fault is a claim the person makes
+    and not something the bench can work out.
+    """
+
+    __tablename__ = "maintenance"
+    __table_args__ = (
+        Index("ix_maintenance_board_at", "board", "at"),
+        Index("ix_maintenance_kind", "kind"),
+        CheckConstraint("faults_cleared >= 0", name="ck_maintenance_faults"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    board: Mapped[str] = mapped_column(_TAG, ForeignKey("boards.tag", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(24))
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    by: Mapped[str] = mapped_column(_NAME)
+    notes: Mapped[str] = mapped_column(String(240), default="")
+    faults_cleared: Mapped[int] = mapped_column(Integer, default=0)

@@ -24,6 +24,7 @@ from fpga.audit import AuditEntry
 from fpga.capabilities import RequirementSet
 from fpga.errors import NotFound
 from fpga.inventory.boards import Board
+from fpga.inventory.maintenance import MaintenanceBook, MaintenanceRecord
 from fpga.inventory.state import BoardState
 from fpga.jobs.models import ProgramJob
 from fpga.leases.models import Lease
@@ -48,6 +49,7 @@ from fpga.persistence.models import (
     BuildReportRow,
     JobRow,
     LeaseRow,
+    MaintenanceRow,
     ProvenanceRow,
     RequestRow,
     SlotRow,
@@ -70,6 +72,7 @@ __all__ = [
     "BoardRepository",
     "JobRepository",
     "LeaseRepository",
+    "MaintenanceRepository",
     "ThermalRepository",
 ]
 
@@ -803,3 +806,66 @@ class RequestRepository:
                 ),
             )
         )
+
+
+class MaintenanceRepository:
+    """Every visit to every board, oldest first."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, record: MaintenanceRecord) -> MaintenanceRecord:
+        self.session.add(
+            MaintenanceRow(
+                board=record.board,
+                kind=record.kind,
+                at=record.at,
+                by=record.by,
+                notes=record.notes,
+                faults_cleared=record.faults_cleared,
+            )
+        )
+        self.session.flush()
+        return record
+
+    def _of(self, row: MaintenanceRow) -> MaintenanceRecord:
+        return MaintenanceRecord(
+            board=row.board,
+            kind=row.kind,
+            at=_aware(row.at),
+            by=row.by,
+            notes=row.notes,
+            faults_cleared=row.faults_cleared,
+        )
+
+    def all(self) -> tuple[MaintenanceRecord, ...]:
+        rows = self.session.scalars(
+            select(MaintenanceRow).order_by(MaintenanceRow.at, MaintenanceRow.id)
+        ).all()
+        return tuple(self._of(row) for row in rows)
+
+    def for_board(self, board: str) -> tuple[MaintenanceRecord, ...]:
+        rows = self.session.scalars(
+            select(MaintenanceRow)
+            .where(MaintenanceRow.board == board.strip().lower())
+            .order_by(MaintenanceRow.at, MaintenanceRow.id)
+        ).all()
+        return tuple(self._of(row) for row in rows)
+
+    def last(self, board: str, kind: str | None = None) -> MaintenanceRecord | None:
+        query = select(MaintenanceRow).where(MaintenanceRow.board == board.strip().lower())
+        if kind is not None:
+            query = query.where(MaintenanceRow.kind == kind.strip().lower())
+        row = self.session.scalars(
+            query.order_by(MaintenanceRow.at.desc(), MaintenanceRow.id.desc()).limit(1)
+        ).first()
+        return None if row is None else self._of(row)
+
+    def book(self) -> MaintenanceBook:
+        """The whole log as the book the calibration rules are written against.
+
+        Loaded in one query rather than asked per board, because every caller
+        of this wants to ask about the whole bench: what is overdue, what was
+        cleared, what has never been calibrated at all.
+        """
+        return MaintenanceBook(list(self.all()))
