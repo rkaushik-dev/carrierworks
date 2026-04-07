@@ -229,6 +229,7 @@ def run() -> None:  # pragma: no cover - the console script entry point
         leases,
         power,
         queue,
+        status,
         thermal,
         upkeep,
     )
