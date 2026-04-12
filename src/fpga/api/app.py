@@ -27,6 +27,7 @@ from fpga.api.routes import (
     jobs,
     keys,
     leases,
+    overview,
     queue,
     reports,
     thermal,
@@ -99,6 +100,7 @@ def build_app(
     app.include_router(reports.router)
     app.include_router(thermal.router)
     app.include_router(queue.router)
+    app.include_router(overview.router)
 
     @app.get("/health", tags=["bench"])
     def health() -> dict[str, Any]:

@@ -22,6 +22,7 @@ from fpga.inventory.state import BoardState
 from fpga.jobs.models import ProgramJob
 from fpga.leases.models import Lease
 from fpga.scheduling.queue import Request
+from fpga.services.overview import BenchOverview
 from fpga.services.scheduling import DispatchOutcome
 from fpga.thermal.alarms import ThermalStatus
 from fpga.thermal.samples import ThermalSample
@@ -36,6 +37,7 @@ __all__ = [
     "JobOut",
     "LeaseIn",
     "LeaseOut",
+    "OverviewOut",
     "RequestIn",
     "RequestOut",
     "SampleIn",
@@ -372,4 +374,44 @@ class DispatchOut(BaseModel):
                 for request, board, lease in outcome.assigned
             ],
             waiting=outcome.refusals,
+        )
+
+
+class OverviewOut(BaseModel):
+    """The whole bench at one moment."""
+
+    at: datetime
+    site: str
+    boards: dict[str, int]
+    available: int
+    total_boards: int
+    leases_held: int
+    leases_expiring: int
+    queue_waiting: int
+    queue_longest_wait_seconds: int
+    jobs_queued: int
+    jobs_running: int
+    thermal: dict[str, int]
+    calibration_overdue: list[str]
+    healthy: bool
+    summary: str
+
+    @classmethod
+    def of(cls, state: BenchOverview) -> OverviewOut:
+        return cls(
+            at=state.at,
+            site=state.site,
+            boards=state.boards,
+            available=state.available,
+            total_boards=state.total_boards,
+            leases_held=state.leases_held,
+            leases_expiring=state.leases_expiring,
+            queue_waiting=state.queue_waiting,
+            queue_longest_wait_seconds=state.queue_longest_wait_seconds,
+            jobs_queued=state.jobs_queued,
+            jobs_running=state.jobs_running,
+            thermal=state.thermal,
+            calibration_overdue=list(state.calibration_overdue),
+            healthy=state.healthy,
+            summary=state.describe(),
         )
