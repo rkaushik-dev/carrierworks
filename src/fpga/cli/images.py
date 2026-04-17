@@ -17,7 +17,7 @@ from fpga.artifacts.registry import ArtifactStore
 from fpga.bitstream.image import load_bitstream
 from fpga.cli.main import Context, bench_command, cli
 from fpga.errors import NotFound
-from fpga.services import registry, reports
+from fpga.services import bundles, registry, reports
 
 __all__ = ["images_group"]
 
@@ -198,3 +198,56 @@ def baseline(context: Context, design: str, pin: str | None) -> None:
         f"{report.design} is measured against {report.short_digest}",
         {"design": report.design, "digest": report.digest},
     )
+
+
+@images_group.command("bundle")
+@click.argument("digest")
+@click.option("--into", required=True, help="where to write the bundle directory")
+@click.option("--approved-by", "approvals", multiple=True, help="who signed it off, repeatable")
+@click.pass_obj
+@bench_command
+def bundle(context: Context, digest: str, into: str, approvals: tuple[str, ...]) -> None:
+    """Write out everything the bench knows about one image.
+
+    What comes out is a directory somebody can attach to a ticket: the
+    configuration bytes, the reports, where the image came from, and every
+    load of it onto a board.
+    """
+    with context.unit() as unit:
+        made = bundles.assemble(
+            unit,
+            digest,
+            into,
+            context.now,
+            store=_store(context),
+            approvals=tuple(approvals),
+        )
+    context.say(
+        made.describe(),
+        {
+            "digest": made.digest,
+            "root": str(made.root),
+            "files": list(made.files),
+            "manifest_digest": made.manifest_digest,
+            "jobs": made.jobs,
+            "reports": made.reports,
+            "builds": made.builds,
+        },
+    )
+
+
+@images_group.command("check-bundle")
+@click.argument("path")
+@click.pass_obj
+@bench_command
+def check_bundle(context: Context, path: str) -> None:
+    """Check a bundle against its own manifest."""
+    problems = bundles.verify(path)
+    if not problems:
+        context.say(f"{path} matches its manifest", {"path": path, "problems": []})
+        return
+    context.say(
+        f"{path} has {len(problems)} problems: " + "; ".join(problems),
+        {"path": path, "problems": list(problems)},
+    )
+    raise SystemExit(2)
