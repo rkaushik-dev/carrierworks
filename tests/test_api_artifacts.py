@@ -6,33 +6,11 @@ from fastapi.testclient import TestClient
 from fpga.api.app import build_app
 from fpga.api.deps import now
 from fpga.artifacts.registry import ArtifactStore
-from fpga.bitstream.bitfile import build_bitfile
-from fpga.bitstream.packets import SYNC_WORD, type1, type2, words_to_bytes
 from fpga.config import BenchSettings
 from fpga.persistence.unit import BenchDatabase
+from images import bitfile
 
 WHEN = datetime(2026, 1, 16, 8, 0, tzinfo=UTC)
-
-
-def bitfile(design="radar_frontend", frames=16, start=True):
-    words = [
-        0xFFFFFFFF,
-        SYNC_WORD,
-        type1(opcode=2, register=12, word_count=1),
-        0x03651093,
-        type1(opcode=2, register=2, word_count=0),
-        type2(opcode=2, word_count=frames),
-        *range(frames),
-    ]
-    if start:
-        words += [type1(opcode=2, register=4, word_count=1), 5]
-    return build_bitfile(
-        design=f"{design};Version=2024.1",
-        part="7k325tffg900",
-        date="2026/01/15",
-        time="02:00:00",
-        data=words_to_bytes(words),
-    )
 
 
 @pytest.fixture()

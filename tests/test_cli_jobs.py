@@ -5,8 +5,6 @@ import pytest
 from click.testing import CliRunner
 
 from boardsetup import kintex
-from fpga.bitstream.bitfile import build_bitfile
-from fpga.bitstream.packets import SYNC_WORD, type1, type2, words_to_bytes
 from fpga.cli import images as image_commands  # noqa: F401  (registers the commands)
 from fpga.cli import jobs as job_commands  # noqa: F401  (registers the commands)
 from fpga.cli import leases as lease_commands  # noqa: F401  (registers the commands)
@@ -14,41 +12,11 @@ from fpga.cli.main import cli
 from fpga.config import BenchSettings
 from fpga.persistence.unit import BenchDatabase
 from fpga.services import inventory
-
-TIMING = """
-| WNS(ns) | TNS(ns) | TNS Failing | TNS Total | WHS(ns) | THS(ns) | THS Failing | THS Total |
-| 0.412 | 0.000 | 0 | 118423 | 0.137 | 0.000 | 0 | 118423 |
-"""
-
-UTILIZATION = """
-| Slice LUTs      | 45123 |     0 |    203800 | 22.14 |
-| Slice Registers | 61234 |     0 |    407600 | 15.02 |
-"""
+from images import TIMING, UTILIZATION, bitfile
 
 
 def now():
     return datetime.now(UTC)
-
-
-def bitfile(frames=16):
-    words = [
-        0xFFFFFFFF,
-        SYNC_WORD,
-        type1(opcode=2, register=12, word_count=1),
-        0x03651093,
-        type1(opcode=2, register=2, word_count=0),
-        type2(opcode=2, word_count=frames),
-        *range(frames),
-        type1(opcode=2, register=4, word_count=1),
-        5,
-    ]
-    return build_bitfile(
-        design="radar_frontend;Version=2024.1",
-        part="7k325tffg900",
-        date="2026/02/22",
-        time="02:00:00",
-        data=words_to_bytes(words),
-    )
 
 
 @pytest.fixture()

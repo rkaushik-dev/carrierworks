@@ -5,45 +5,13 @@ import pytest
 
 from boardsetup import kintex
 from fpga.artifacts.registry import ArtifactStore
-from fpga.bitstream.bitfile import build_bitfile
 from fpga.bitstream.image import read_bitstream
-from fpga.bitstream.packets import SYNC_WORD, type1, type2, words_to_bytes
 from fpga.errors import NotFound, ValidationError
 from fpga.persistence.unit import BenchDatabase
 from fpga.services import bundles, inventory, leasing, programming, registry, reports
+from images import TIMING, UTILIZATION, bitfile
 
 WHEN = datetime(2026, 4, 20, 9, 0, tzinfo=UTC)
-
-TIMING = """
-| WNS(ns) | TNS(ns) | TNS Failing | TNS Total | WHS(ns) | THS(ns) | THS Failing | THS Total |
-| 0.412 | 0.000 | 0 | 118423 | 0.137 | 0.000 | 0 | 118423 |
-"""
-
-UTILIZATION = """
-| Slice LUTs      | 45123 |     0 |    203800 | 22.14 |
-| Slice Registers | 61234 |     0 |    407600 | 15.02 |
-"""
-
-
-def bitfile(frames=16):
-    words = [
-        0xFFFFFFFF,
-        SYNC_WORD,
-        type1(opcode=2, register=12, word_count=1),
-        0x03651093,
-        type1(opcode=2, register=2, word_count=0),
-        type2(opcode=2, word_count=frames),
-        *range(frames),
-        type1(opcode=2, register=4, word_count=1),
-        5,
-    ]
-    return build_bitfile(
-        design="radar_frontend;Version=2024.1",
-        part="7k325tffg900",
-        date="2026/04/19",
-        time="02:00:00",
-        data=words_to_bytes(words),
-    )
 
 
 @pytest.fixture()

@@ -5,8 +5,6 @@ import pytest
 from click.testing import CliRunner
 
 from boardsetup import artix, kintex
-from fpga.bitstream.bitfile import build_bitfile
-from fpga.bitstream.packets import SYNC_WORD, type1, type2, words_to_bytes
 from fpga.cli import flash as flash_commands  # noqa: F401  (registers the commands)
 from fpga.cli import images as image_commands  # noqa: F401  (registers the commands)
 from fpga.cli.main import cli
@@ -16,6 +14,7 @@ from fpga.flash.wear import WearLedger
 from fpga.jobs.runner import flash_layout
 from fpga.persistence.unit import BenchDatabase
 from fpga.services import inventory
+from images import bitfile
 
 
 def now():
@@ -49,28 +48,6 @@ def run(bench):
         return runner.invoke(cli, ["--database", url, *args], catch_exceptions=False)
 
     return invoke
-
-
-def bitfile(frames=8192):
-    """A small but real image: sync, idcode, a block of frames, then a start."""
-    words = [
-        0xFFFFFFFF,
-        SYNC_WORD,
-        type1(opcode=2, register=12, word_count=1),
-        0x03651093,
-        type1(opcode=2, register=2, word_count=0),
-        type2(opcode=2, word_count=frames),
-        *range(frames),
-        type1(opcode=2, register=4, word_count=1),
-        5,
-    ]
-    return build_bitfile(
-        design="radar_frontend;Version=2024.1",
-        part="7k325tffg900",
-        date="2026/02/22",
-        time="02:00:00",
-        data=words_to_bytes(words),
-    )
 
 
 @pytest.fixture()
