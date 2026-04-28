@@ -53,7 +53,7 @@ def in_flight(unit, journal, digest, *, board="bx-14", mode="jtag", started=True
 
 def test_a_bench_with_nothing_running_has_nothing_to_recover(unit, journal):
     assert recovery.interrupted(unit, journal) == ()
-    assert recovery.recover(unit, journal, WHEN) == ()
+    assert recovery.recover(unit, journal, WHEN).clean is True
 
 
 def test_a_running_job_with_an_open_journal_line_is_interrupted(unit, journal, digest):
@@ -74,8 +74,8 @@ def test_a_job_the_journal_closed_is_not_interrupted(unit, journal, digest):
 
 def test_an_interrupted_jtag_load_goes_back_on_the_queue(unit, journal, digest):
     job = in_flight(unit, journal, digest)
-    done = recovery.recover(unit, journal, WHEN)
-    assert [entry.action for entry in done] == ["requeued"]
+    report = recovery.recover(unit, journal, WHEN)
+    assert report.jobs_requeued == (job.id,)
     assert unit.jobs.get(job.id).state == "queued"
 
 
@@ -97,30 +97,30 @@ def test_a_requeued_job_on_a_board_nobody_holds_goes_back_to_available(unit, jou
 
 def test_an_interrupted_flash_write_faults_the_board(unit, journal, digest):
     job = in_flight(unit, journal, digest, mode="flash-update")
-    done = recovery.recover(unit, journal, WHEN)
-    assert done[0].board_faulted is True
+    report = recovery.recover(unit, journal, WHEN)
+    assert report.boards_faulted == ("bx-14",)
     assert unit.boards.state("bx-14").state == "faulted"
     assert unit.jobs.get(job.id).state == "failed"
 
 
-def test_the_fault_says_the_part_is_in_an_unknown_state(unit, journal, digest):
+def test_a_faulted_board_gives_its_lease_back(unit, journal, digest):
     in_flight(unit, journal, digest, mode="flash-golden")
-    done = recovery.recover(unit, journal, WHEN)
-    assert "unknown state" in done[0].reason
+    recovery.recover(unit, journal, WHEN)
+    assert unit.leases.for_board("bx-14", WHEN) is None
 
 
 def test_a_job_out_of_attempts_is_not_requeued(unit, journal, digest):
     job = in_flight(unit, journal, digest, attempts=3)
-    done = recovery.recover(unit, journal, WHEN)
-    assert [entry.action for entry in done] == ["failed"]
+    report = recovery.recover(unit, journal, WHEN)
+    assert report.jobs_closed == (job.id,)
     assert unit.jobs.get(job.id).state == "failed"
     assert unit.boards.state("bx-14").state == "leased"
 
 
 def test_the_attempt_limit_comes_from_the_settings(unit, journal, digest):
-    in_flight(unit, journal, digest, attempts=2)
-    done = recovery.recover(unit, journal, WHEN, settings=BenchSettings(program_attempts=2))
-    assert done[0].action == "failed"
+    job = in_flight(unit, journal, digest, attempts=2)
+    report = recovery.recover(unit, journal, WHEN, settings=BenchSettings(program_attempts=2))
+    assert report.jobs_closed == (job.id,)
 
 
 def test_recovery_closes_the_journal_line(unit, journal, digest):
@@ -133,31 +133,29 @@ def test_recovery_closes_the_journal_line(unit, journal, digest):
 
 
 def test_recovery_leaves_a_line_in_the_audit_trail(unit, journal, digest):
-    in_flight(unit, journal, digest)
+    job = in_flight(unit, journal, digest)
     recovery.recover(unit, journal, WHEN)
-    actions = [
-        entry.action for entry in unit.audit.for_subject("bx-14") if entry.actor == "recovery"
-    ]
-    assert "requeued" in actions
+    trail = unit.audit.for_subject(job.id)
+    assert [entry.action for entry in trail if entry.actor == "recovery"] == ["requeued"]
+    board_lines = unit.audit.for_subject("bx-14")
+    assert "returned" in [entry.action for entry in board_lines if entry.actor == "recovery"]
 
 
 def test_two_interrupted_jobs_are_both_dealt_with(unit, journal, digest):
-    in_flight(unit, journal, digest, board="bx-14", mode="jtag")
+    first = in_flight(unit, journal, digest, board="bx-14", mode="jtag")
     in_flight(unit, journal, digest, board="bx-15", mode="flash-update")
-    done = recovery.recover(unit, journal, WHEN)
-    assert {entry.board: entry.action for entry in done} == {
-        "bx-14": "requeued",
-        "bx-15": "faulted",
-    }
+    report = recovery.recover(unit, journal, WHEN)
+    assert report.jobs_requeued == (first.id,)
+    assert report.boards_faulted == ("bx-15",)
+    assert report.boards_returned == ("bx-14",)
 
 
 def test_running_recovery_twice_changes_nothing_the_second_time(unit, journal, digest):
     in_flight(unit, journal, digest)
     recovery.recover(unit, journal, WHEN)
-    assert recovery.recover(unit, journal, WHEN + timedelta(minutes=1)) == ()
+    assert recovery.recover(unit, journal, WHEN + timedelta(minutes=1)).clean is True
 
 
-def test_the_outcome_reads_as_one_line(unit, journal, digest):
+def test_the_report_reads_as_one_line(unit, journal, digest):
     in_flight(unit, journal, digest)
-    done = recovery.recover(unit, journal, WHEN)
-    assert done[0].describe().startswith("job-00001 on bx-14: requeued")
+    assert "requeued job-00001" in recovery.recover(unit, journal, WHEN).describe()

@@ -19,10 +19,12 @@ from typing import Protocol, runtime_checkable
 
 from fpga.inventory.boards import Board
 from fpga.inventory.state import BoardState
+from fpga.jobs.models import ProgramJob
 from fpga.leases.models import Lease
 
 __all__ = [
     "BoardRegistry",
+    "JobLedger",
     "LeaseRegistry",
 ]
 
@@ -38,6 +40,8 @@ class BoardRegistry(Protocol):
     def state(self, tag: str) -> BoardState: ...
 
     def all(self) -> tuple[Board, ...]: ...
+
+    def in_state(self, state: str) -> tuple[Board, ...]: ...
 
     def move_to(
         self,
@@ -57,3 +61,16 @@ class LeaseRegistry(Protocol):
     def for_board(self, tag: str, now: datetime) -> Lease | None: ...
 
     def release(self, lease_id: str, now: datetime, reason: str = ...) -> Lease: ...
+
+
+@runtime_checkable
+class JobLedger(Protocol):
+    """Reading one job back and writing what became of it.
+
+    Two methods because that is what recovery needs. Anything that wants to
+    ask the queue a question uses the repository or the store directly.
+    """
+
+    def job(self, job_id: str) -> ProgramJob: ...
+
+    def update(self, job: ProgramJob) -> ProgramJob: ...

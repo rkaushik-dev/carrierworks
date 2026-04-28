@@ -17,12 +17,14 @@ from datetime import datetime
 
 from fpga.inventory.boards import Board
 from fpga.inventory.state import BoardState
+from fpga.jobs.models import ProgramJob
 from fpga.leases.models import Lease
 from fpga.persistence.unit import UnitOfWork
 from fpga.services import inventory, leasing
 
 __all__ = [
     "BookOverRepository",
+    "JobLedgerOverRepository",
     "LeaseStoreOverRepository",
 ]
 
@@ -95,3 +97,16 @@ class LeaseStoreOverRepository:
 
     def release(self, lease_id: str, now: datetime, reason: str = "released") -> Lease:
         return leasing.release(self.unit, lease_id, now, reason)
+
+
+class JobLedgerOverRepository:
+    """The two job methods recovery needs, backed by the job repository."""
+
+    def __init__(self, unit: UnitOfWork) -> None:
+        self.unit = unit
+
+    def job(self, job_id: str) -> ProgramJob:
+        return self.unit.jobs.get(job_id)
+
+    def update(self, job: ProgramJob) -> ProgramJob:
+        return self.unit.jobs.save(job)

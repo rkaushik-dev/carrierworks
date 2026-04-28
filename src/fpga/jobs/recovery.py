@@ -24,10 +24,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from fpga.inventory.book import BoardBook
 from fpga.jobs.journal import JobJournal
-from fpga.jobs.store import JobStore
-from fpga.leases.store import LeaseStore
+from fpga.registries import BoardRegistry, JobLedger, LeaseRegistry
 
 __all__ = [
     "RecoveryReport",
@@ -40,13 +38,16 @@ class RecoveryReport:
     """What the bench found and did when it came back."""
 
     jobs_closed: tuple[str, ...] = ()
+    jobs_requeued: tuple[str, ...] = ()
     boards_faulted: tuple[str, ...] = ()
     boards_returned: tuple[str, ...] = ()
     unknown_jobs: tuple[str, ...] = ()
 
     @property
     def clean(self) -> bool:
-        return not (self.jobs_closed or self.boards_faulted or self.boards_returned)
+        return not (
+            self.jobs_closed or self.jobs_requeued or self.boards_faulted or self.boards_returned
+        )
 
     def describe(self) -> str:
         if self.clean:
@@ -54,6 +55,8 @@ class RecoveryReport:
         parts = []
         if self.jobs_closed:
             parts.append(f"closed {', '.join(self.jobs_closed)}")
+        if self.jobs_requeued:
+            parts.append(f"requeued {', '.join(self.jobs_requeued)}")
         if self.boards_faulted:
             parts.append(f"faulted {', '.join(self.boards_faulted)}")
         if self.boards_returned:
@@ -65,13 +68,23 @@ class RecoveryReport:
 
 def recover(
     journal: JobJournal,
-    jobs: JobStore,
-    book: BoardBook,
-    leases: LeaseStore,
+    jobs: JobLedger,
+    book: BoardRegistry,
+    leases: LeaseRegistry,
     now: datetime,
+    *,
+    retry_limit: int = 0,
 ) -> RecoveryReport:
-    """Close what was left open and put the boards somewhere honest."""
+    """Close what was left open and put the boards somewhere honest.
+
+    A retry limit puts an interrupted load back on the queue rather than
+    failing it, as long as it has attempts left and it was not writing flash.
+    A flash write is never retried on its own, because the part it was writing
+    is in a state nothing can read back and be sure of. Zero, the default,
+    means every interrupted job ends.
+    """
     closed: list[str] = []
+    requeued: list[str] = []
     faulted: list[str] = []
     returned: list[str] = []
     unknown: list[str] = []
@@ -87,10 +100,16 @@ def recover(
         boards_seen.add(job.board)
         if not job.finished:
             running = job if job.state == "running" else job.start(now)
+            retryable = retry_limit > 0 and not job.writes_flash and not job.exhausted(retry_limit)
             jobs.update(
-                running.failed(now, "the bench restarted during this job", code="abandoned")
+                running.failed(
+                    now,
+                    "the bench restarted during this job",
+                    code="abandoned",
+                    retryable=retryable,
+                )
             )
-            closed.append(job.id)
+            (requeued if retryable else closed).append(job.id)
         journal.append(job.id, "abandoned", now, board=job.board)
         _settle(
             book,
@@ -117,6 +136,7 @@ def recover(
 
     return RecoveryReport(
         jobs_closed=tuple(closed),
+        jobs_requeued=tuple(requeued),
         boards_faulted=tuple(sorted(set(faulted))),
         boards_returned=tuple(sorted(set(returned))),
         unknown_jobs=tuple(unknown),
@@ -124,8 +144,8 @@ def recover(
 
 
 def _settle(
-    book: BoardBook,
-    leases: LeaseStore,
+    book: BoardRegistry,
+    leases: LeaseRegistry,
     board: str,
     now: datetime,
     *,
