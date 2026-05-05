@@ -11,14 +11,8 @@ from __future__ import annotations
 
 import click
 
-from fpga.artifacts.registry import ArtifactStore
 from fpga.cli.main import Context, bench_command, cli
-from fpga.drivers import flash_for, session_for
-from fpga.inventory.faults import FaultLog
-from fpga.jobs.journal import JobJournal
-from fpga.jobs.runner import JobRunner
-from fpga.services import programming, reports
-from fpga.services.adapters import BookOverRepository, LeaseStoreOverRepository
+from fpga.services import execution, programming
 
 __all__ = ["jobs_group"]
 
@@ -100,33 +94,17 @@ def list_jobs(context: Context, state: str | None, tag: str | None) -> None:
 @bench_command
 def run_job(context: Context, job_id: str | None, live: bool) -> None:
     """Run one job, the next ready one by default, and say what happened."""
-    journal = JobJournal(context.settings.journal_root / "jobs.jsonl")
-    faults = FaultLog()
     with context.unit() as unit:
-        job = unit.jobs.get(job_id) if job_id else programming.next_ready(unit, context.now)
+        job = unit.jobs.get(job_id) if job_id else execution.next_ready(unit, context.now)
         if job is None:
             context.say("nothing is ready to run", {"ran": None})
             return
-        board = unit.boards.get(job.board)
-        closed, _ = reports.timing_for(unit, job.digest)
-        runner = JobRunner(
-            ArtifactStore(context.settings.artifact_root),
-            BookOverRepository(unit),
-            LeaseStoreOverRepository(unit),
-            journal,
-            faults,
-            settings=context.settings,
-        )
-        result = runner.run(
+        result = execution.run_job(
+            unit,
             job,
             context.now,
-            session_for=lambda tag: session_for(board, simulated=not live),
-            flash_for=lambda tag: flash_for(board, simulated=not live),
-            timing_closed=closed,
-        )
-        unit.jobs.save(
-            result.job,
-            not_before=None if not result.will_retry else context.now,
+            settings=context.settings,
+            live=live,
         )
     context.say(
         result.describe(),

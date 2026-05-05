@@ -232,6 +232,7 @@ def run() -> None:  # pragma: no cover - the console script entry point
         status,
         thermal,
         upkeep,
+        worker,
     )
 
     cli()
