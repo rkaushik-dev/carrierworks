@@ -120,9 +120,10 @@ def cancel(context: Context, request_id: str) -> None:
 @queue_group.command("dispatch")
 @click.option("--limit", default=0, help="hand out at most this many boards")
 @click.option("--quota", "quotas", multiple=True, help="team=count, repeatable")
+@click.option("--preempt", is_flag=True, help="take a board off a lower priority holder")
 @click.pass_obj
 @bench_command
-def dispatch(context: Context, limit: int, quotas: tuple[str, ...]) -> None:
+def dispatch(context: Context, limit: int, quotas: tuple[str, ...], preempt: bool) -> None:
     """One pass over the list, taking every board it can."""
     with context.unit() as unit:
         outcome = queue_service.dispatch(
@@ -131,6 +132,7 @@ def dispatch(context: Context, limit: int, quotas: tuple[str, ...]) -> None:
             settings=context.settings,
             quotas=_quotas(quotas),
             limit=limit,
+            preempt=preempt,
         )
     context.say(
         outcome.describe(),
@@ -140,6 +142,7 @@ def dispatch(context: Context, limit: int, quotas: tuple[str, ...]) -> None:
                 for request, board, lease in outcome.assigned
             ],
             "waiting": outcome.refusals,
+            "preempted": [{"lease": lease, "board": board} for lease, board in outcome.preempted],
         },
     )
 

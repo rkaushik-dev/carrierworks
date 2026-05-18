@@ -14,6 +14,12 @@ up on its own.
 Dispatch takes the transaction with it. A request that gets a board and a
 lease that gets written are the same commit, so a crash between them is not a
 state anybody has to clean up.
+
+Preemption is off unless a caller asks for it, and even then it is the last
+thing tried: every free board is offered first, and a lease is only taken when
+nothing free will do. What may be taken is not decided here. That is the
+preemption policy, which knows about margins, minimum hold times and the
+board being programmed right now.
 """
 
 from __future__ import annotations
@@ -24,8 +30,11 @@ from datetime import datetime
 from fpga.capabilities import RequirementSet
 from fpga.config import BenchSettings
 from fpga.errors import ValidationError
+from fpga.inventory.profile import matches
+from fpga.leases.models import Lease
 from fpga.persistence.unit import UnitOfWork
 from fpga.scheduling.matcher import choose
+from fpga.scheduling.preemption import PreemptionPolicy
 from fpga.scheduling.queue import Request
 from fpga.services import leasing
 
@@ -44,6 +53,7 @@ class DispatchOutcome:
 
     assigned: tuple[tuple[str, str, str], ...] = ()
     skipped: dict[str, str] | None = None
+    preempted: tuple[tuple[str, str], ...] = ()
 
     @property
     def refusals(self) -> dict[str, str]:
@@ -53,6 +63,7 @@ class DispatchOutcome:
         if not self.assigned and not self.refusals:
             return "nothing waiting"
         lines = [f"{request} -> {board} as {lease}" for request, board, lease in self.assigned]
+        lines += [f"took {lease} off {board}" for lease, board in self.preempted]
         lines += [f"{request} waits: {why}" for request, why in sorted(self.refusals.items())]
         return "; ".join(lines)
 
@@ -111,20 +122,26 @@ def dispatch(
     settings: BenchSettings | None = None,
     quotas: dict[str, int] | None = None,
     limit: int = 0,
+    preempt: bool = False,
+    policy: PreemptionPolicy | None = None,
 ) -> DispatchOutcome:
     """One pass over the waiting list, taking every board it can.
 
     Boards are taken out of the pool as they are handed out, so two requests
     in one pass never both get the same board. That is the bug this being one
-    function rather than a loop over a scheduler avoids.
+    function rather than a loop over a scheduler avoids. A preempted board was
+    never in the pool to begin with, which is why it is discarded rather than
+    removed.
     """
     live = settings or BenchSettings()
     if limit < 0:
         raise ValidationError("a dispatch limit is not negative", field="limit", given=limit)
     leasing.sweep_expired(unit, now)
+    rules = policy or PreemptionPolicy()
     free = {board.tag: board for board in unit.boards.available()}
     assigned: list[tuple[str, str, str]] = []
     skipped: dict[str, str] = {}
+    taken: list[tuple[str, str]] = []
     for request in unit.requests.ordered(now):
         if limit and len(assigned) >= limit:
             skipped[request.id] = "not reached on this pass"
@@ -134,6 +151,11 @@ def dispatch(
             skipped[request.id] = refusal
             continue
         board = choose(tuple(free.values()), request.requirements, now=now)
+        if board is None and preempt:
+            bumped = _preempt_for(unit, request, now, rules)
+            if bumped is not None:
+                taken.append((bumped.id, bumped.board))
+                board = unit.boards.get(bumped.board)
         if board is None:
             skipped[request.id] = "nothing free matches what it asked for"
             continue
@@ -149,6 +171,42 @@ def dispatch(
             settings=live,
         )
         unit.requests.save(request.satisfy(now), board=board.tag)
-        del free[board.tag]
+        free.pop(board.tag, None)
         assigned.append((request.id, board.tag, lease.id))
-    return DispatchOutcome(assigned=tuple(assigned), skipped=skipped)
+    return DispatchOutcome(
+        assigned=tuple(assigned),
+        skipped=skipped,
+        preempted=tuple(taken),
+    )
+
+
+def _preempt_for(
+    unit: UnitOfWork,
+    request: Request,
+    now: datetime,
+    policy: PreemptionPolicy,
+) -> Lease | None:
+    """Take a board off somebody, if the policy and the requirements allow it.
+
+    Only leases on boards that would actually satisfy the request are offered
+    to the policy. Bumping somebody off a board that then turns out not to
+    have the right converter fitted is the worst outcome available here.
+    """
+    wanted: list[Lease] = []
+    for lease in unit.leases.active(now):
+        board = unit.boards.get(lease.board)
+        if matches(board, request.requirements):
+            wanted.append(lease)
+    if not wanted:
+        return None
+    states = {lease.board: unit.boards.state(lease.board).state for lease in wanted}
+    chosen = policy.choose(
+        tuple(wanted),
+        now,
+        claimant_priority=request.priority,
+        board_states=states,
+    )
+    if chosen is None:
+        return None
+    leasing.release(unit, chosen.id, now, f"preempted by {request.id}")
+    return chosen
