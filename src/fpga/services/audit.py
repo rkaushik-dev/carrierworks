@@ -69,3 +69,22 @@ def since(unit: UnitOfWork, now: datetime, window: timedelta) -> tuple[AuditEntr
     if window <= timedelta(0):
         raise ValidationError("a window has some length", field="window")
     return unit.audit.since(now - window)
+
+
+def search(
+    unit: UnitOfWork,
+    *,
+    subject: str | None = None,
+    actor: str | None = None,
+    action: str | None = None,
+    since: datetime | None = None,
+    limit: int = 50,
+) -> tuple[AuditEntry, ...]:
+    """The trail, narrowed by whatever the caller knows."""
+    return unit.audit.search(
+        subject=subject,
+        actor=actor,
+        action=action,
+        since=since,
+        limit=limit,
+    )

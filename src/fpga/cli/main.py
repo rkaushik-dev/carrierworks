@@ -222,6 +222,7 @@ def run() -> None:  # pragma: no cover - the console script entry point
     module keeps the import graph acyclic: they import this for the context.
     """
     from fpga.cli import (  # noqa: F401
+        audit,
         chain,
         flash,
         images,

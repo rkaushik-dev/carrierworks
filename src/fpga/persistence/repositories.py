@@ -506,6 +506,36 @@ class AuditRepository:
         ).all()
         return tuple(self._of(row) for row in rows)
 
+    def search(
+        self,
+        *,
+        subject: str | None = None,
+        actor: str | None = None,
+        action: str | None = None,
+        since: datetime | None = None,
+        limit: int = 50,
+    ) -> tuple[AuditEntry, ...]:
+        """The trail narrowed by whatever was given, newest first.
+
+        Every filter is optional and they combine, because the two questions
+        this table gets asked are "what happened to this board" and "what has
+        this script been doing", and the second one is nearly always asked
+        with a date on it.
+        """
+        query = select(AuditRow)
+        if subject is not None:
+            query = query.where(AuditRow.subject == subject.strip().lower())
+        if actor is not None:
+            query = query.where(AuditRow.actor == actor.strip().lower())
+        if action is not None:
+            query = query.where(AuditRow.action == action.strip().lower())
+        if since is not None:
+            query = query.where(AuditRow.at >= since)
+        rows = self.session.scalars(
+            query.order_by(AuditRow.at.desc(), AuditRow.id.desc()).limit(limit)
+        ).all()
+        return tuple(self._of(row) for row in rows)
+
     def since(self, when: datetime) -> tuple[AuditEntry, ...]:
         rows = self.session.scalars(
             select(AuditRow).where(AuditRow.at >= when).order_by(AuditRow.at, AuditRow.id)
