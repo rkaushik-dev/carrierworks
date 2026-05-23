@@ -14,7 +14,9 @@ from typing import Any
 import click
 
 from fpga.artifacts.registry import ArtifactStore
+from fpga.bitstream.binary import pad_to, reverse_bits
 from fpga.bitstream.image import load_bitstream
+from fpga.bitstream.mcs import write_mcs
 from fpga.cli.main import Context, bench_command, cli
 from fpga.errors import NotFound
 from fpga.services import bundles, registry, reports
@@ -251,3 +253,60 @@ def check_bundle(context: Context, path: str) -> None:
         {"path": path, "problems": list(problems)},
     )
     raise SystemExit(2)
+
+
+@images_group.command("export")
+@click.argument("digest")
+@click.option("--into", required=True, type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--format", "shape", default="bin", help="bin or mcs")
+@click.option("--at", "start", default="0", help="the flash address it will be written to")
+@click.option("--pad-to", "pad", default=0, help="pad out to this many bytes with erased flash")
+@click.option("--spi", is_flag=True, help="bit reverse each byte for a spi part")
+@click.pass_obj
+@bench_command
+def export(
+    context: Context,
+    digest: str,
+    into: Path,
+    shape: str,
+    start: str,
+    pad: int,
+    spi: bool,
+) -> None:
+    """Write an image out for a programmer that is not this bench.
+
+    Two things about the bytes are worth saying out loud, because both have
+    cost somebody a day. An mcs file carries the address it loads at, so an
+    image meant for the update half of the part has to be exported with that
+    address or it lands on top of the golden image. And a part programmed over
+    spi wants each byte bit reversed, which is not something the file records:
+    it is a property of how the programmer clocks it out.
+    """
+    if shape not in ("bin", "mcs"):
+        raise click.UsageError("the format is bin or mcs")
+    address = int(start, 0)
+    if address < 0:
+        raise click.UsageError("a flash address is not negative")
+    store = _store(context)
+    with context.unit() as unit:
+        record = unit.artifacts.get(digest)
+    data = store.read(record.digest)
+    if pad:
+        data = pad_to(data, pad)
+    if spi:
+        data = reverse_bits(data)
+    if shape == "mcs":
+        into.write_text(write_mcs(data, start_address=address), encoding="utf-8")
+    else:
+        into.write_bytes(data)
+    context.say(
+        f"{record.short_digest} written to {into} as {shape}, {len(data)} bytes",
+        {
+            "digest": record.digest,
+            "path": str(into),
+            "format": shape,
+            "bytes": len(data),
+            "address": address,
+            "spi": spi,
+        },
+    )
