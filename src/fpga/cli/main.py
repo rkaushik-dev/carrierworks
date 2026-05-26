@@ -19,6 +19,7 @@ import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import click
@@ -26,7 +27,7 @@ import click
 from fpga.config import BenchSettings
 from fpga.errors import BenchError
 from fpga.persistence.unit import BenchDatabase, UnitOfWork
-from fpga.services import inventory
+from fpga.services import bench_file, inventory
 
 __all__ = ["cli", "run"]
 
@@ -212,6 +213,45 @@ def set_state(context: Context, tag: str, state: str, reason: str, actor: str) -
     if given_back:
         message = f"{message}, {given_back} released"
     context.say(message, {"board": tag, "state": moved.state, "released": given_back})
+
+
+@boards_group.command("import")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False))
+@click.option("--replace", is_flag=True, help="overwrite boards the bench already has")
+@click.pass_obj
+@bench_command
+def import_boards(context: Context, path: str, replace: bool) -> None:
+    """Put every board in a bench file onto the bench."""
+    text = bench_file.read_file(path)
+    with context.unit() as unit:
+        outcome = bench_file.import_bench(unit, text, context.now, replace=replace)
+    context.say(
+        outcome.describe(),
+        {
+            "added": list(outcome.added),
+            "replaced": list(outcome.replaced),
+            "skipped": list(outcome.skipped),
+        },
+    )
+
+
+@boards_group.command("export")
+@click.option("--into", default=None, help="write to a file rather than to the terminal")
+@click.pass_obj
+@bench_command
+def export_boards(context: Context, into: str | None) -> None:
+    """Write the bench out in the shape the import command reads."""
+    with context.unit() as unit:
+        payload = bench_file.export_bench(unit, site=context.settings.site)
+    text = json.dumps(payload, indent=2, default=str) + "\n"
+    if into is None:
+        click.echo(text, nl=False)
+        return
+    Path(into).write_text(text, encoding="utf-8")
+    context.say(
+        f"{len(payload['boards'])} boards written to {into}",
+        {"path": into, "boards": len(payload["boards"])},
+    )
 
 
 def run() -> None:  # pragma: no cover - the console script entry point
