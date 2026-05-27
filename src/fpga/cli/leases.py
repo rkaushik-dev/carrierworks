@@ -8,6 +8,8 @@ that nobody else is using.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import click
 
 from fpga.capabilities import RequirementSet
@@ -156,3 +158,30 @@ def sweep(context: Context) -> None:
         context.say("nothing had run out", {"closed": []})
         return
     context.emit(rows, ("lease", "board", "holder"))
+
+
+@leases_group.command("expiring")
+@click.option("--minutes", default=15, help="how far ahead to look")
+@click.option("--remind", "write_reminder", is_flag=True, help="write a line into the trail")
+@click.pass_obj
+@bench_command
+def expiring(context: Context, minutes: int, write_reminder: bool) -> None:
+    """Leases about to run out, soonest first."""
+    window = timedelta(minutes=minutes)
+    with context.unit() as unit:
+        found = (
+            leasing.remind(unit, context.now, window)
+            if write_reminder
+            else leasing.expiring(unit, context.now, window)
+        )
+        rows = [
+            {
+                "lease": lease.id,
+                "asset": lease.board,
+                "holder": lease.holder,
+                "left": f"{int(lease.remaining(context.now).total_seconds() // 60)}m",
+                "renewals": lease.renewals,
+            }
+            for lease in found
+        ]
+    context.emit(rows, ("lease", "asset", "holder", "left", "renewals"))

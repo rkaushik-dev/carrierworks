@@ -21,6 +21,8 @@ from fpga.services import audit
 
 __all__ = [
     "acquire",
+    "expiring",
+    "remind",
     "next_lease_id",
     "release",
     "renew",
@@ -167,3 +169,44 @@ def sweep_expired(unit: UnitOfWork, now: datetime) -> tuple[Lease, ...]:
                 )
             closed.append(expired)
     return tuple(closed)
+
+
+def expiring(
+    unit: UnitOfWork,
+    now: datetime,
+    within: timedelta = timedelta(minutes=15),
+) -> tuple[Lease, ...]:
+    """Leases that run out soon, soonest first.
+
+    Soon is a window rather than a threshold because the interesting question
+    is who to warn, and warning somebody about a lease with four hours left is
+    how people learn to ignore the warnings.
+    """
+    if within <= timedelta(0):
+        raise ValidationError("a warning window has some length", field="within")
+    soon = [lease for lease in unit.leases.active(now) if lease.remaining(now) <= within]
+    return tuple(sorted(soon, key=lambda lease: (lease.expires_at, lease.id)))
+
+
+def remind(
+    unit: UnitOfWork,
+    now: datetime,
+    within: timedelta = timedelta(minutes=15),
+) -> tuple[Lease, ...]:
+    """Write a warning into the trail for every lease about to run out.
+
+    The trail is the only place the bench can leave a message for somebody who
+    is not looking at it right now, and a swept lease that surprised its holder
+    is the complaint this answers.
+    """
+    warned = expiring(unit, now, within)
+    for lease in warned:
+        minutes = int(lease.remaining(now).total_seconds() // 60)
+        audit.record(
+            unit,
+            now,
+            "expiring",
+            subject=lease.board,
+            detail=f"{lease.id} held by {lease.holder} runs out in {minutes} minutes",
+        )
+    return warned
