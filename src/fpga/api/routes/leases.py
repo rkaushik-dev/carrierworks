@@ -7,7 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, Depends, Query
 
 from fpga.access import ApiKey
-from fpga.api.deps import get_settings, now, unit_of_work
+from fpga.api.deps import Page, get_settings, now, page, unit_of_work
 from fpga.api.schemas import LeaseIn, LeaseOut
 from fpga.api.security import needs
 from fpga.config import BenchSettings
@@ -22,12 +22,12 @@ def list_leases(
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
     holder: str | None = Query(default=None, description="one team rather than all of them"),
+    window: Page = Depends(page),
     _: ApiKey = Depends(needs("reader")),
 ) -> list[LeaseOut]:
     """Every lease being held right now."""
-    if holder is not None:
-        return [LeaseOut.of(lease) for lease in unit.leases.held_by(holder, moment)]
-    return [LeaseOut.of(lease) for lease in unit.leases.active(moment)]
+    held = unit.leases.held_by(holder, moment) if holder is not None else unit.leases.active(moment)
+    return [LeaseOut.of(lease) for lease in window.slice(held)]
 
 
 @router.get("/leases/{lease_id}", response_model=LeaseOut)

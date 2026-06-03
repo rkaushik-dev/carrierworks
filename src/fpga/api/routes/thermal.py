@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Body, Depends, Query
 
 from fpga.access import ApiKey
-from fpga.api.deps import get_settings, now, unit_of_work
+from fpga.api.deps import Page, get_settings, now, page, unit_of_work
 from fpga.api.schemas import SampleIn, SampleOut, StatusOut, SupervisorActionOut
 from fpga.api.security import needs
 from fpga.config import BenchSettings
@@ -71,12 +71,13 @@ def read_board_history(
     unit: UnitOfWork = Depends(unit_of_work),
     moment: datetime = Depends(now),
     window: int = Query(default=60, ge=1, le=10080, description="minutes back to go"),
+    rows: Page = Depends(page),
     _: ApiKey = Depends(needs("reader")),
 ) -> list[SampleOut]:
     """One board's readings, oldest first."""
     unit.boards.get(tag)
     samples = unit.thermal.since(moment - timedelta(minutes=window), tag)
-    return [SampleOut.of(sample) for sample in samples]
+    return [SampleOut.of(sample) for sample in rows.slice(samples)]
 
 
 @router.post("/thermal/tick", response_model=list[SupervisorActionOut])

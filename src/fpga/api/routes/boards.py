@@ -7,7 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 
 from fpga.access import ApiKey
-from fpga.api.deps import now, unit_of_work
+from fpga.api.deps import Page, now, page, unit_of_work
 from fpga.api.schemas import BoardIn, BoardOut, StateIn
 from fpga.api.security import needs
 from fpga.catalog.partnumber import parse_part_number
@@ -51,6 +51,7 @@ def list_boards(
     unit: UnitOfWork = Depends(unit_of_work),
     available: bool = Query(default=False, description="only boards nobody is using"),
     rack: str | None = Query(default=None, description="one rack rather than the whole bench"),
+    window: Page = Depends(page),
     _: ApiKey = Depends(needs("reader")),
 ) -> list[BoardOut]:
     """Every board, or the ones a filter asks for."""
@@ -58,7 +59,7 @@ def list_boards(
         boards = unit.boards.in_rack(rack)
     else:
         boards = inventory.list_boards(unit, only_available=available)
-    return [BoardOut.of(board, unit.boards.state(board.tag)) for board in boards]
+    return [BoardOut.of(board, unit.boards.state(board.tag)) for board in window.slice(boards)]
 
 
 @router.get("/{tag}", response_model=BoardOut)
