@@ -14,10 +14,12 @@ has to act while it still has the transaction.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from fpga.audit import AuditEntry
 from fpga.config import BenchSettings
+from fpga.errors import NotFound
 from fpga.persistence.unit import UnitOfWork
 from fpga.services.adapters import BookOverRepository, LeaseStoreOverRepository
 from fpga.temperature import ThermalLimits
@@ -27,6 +29,7 @@ from fpga.thermal.supervisor import SupervisorAction, ThermalSupervisor
 
 __all__ = [
     "limits_for",
+    "record_batch",
     "load_window",
     "prune",
     "record",
@@ -48,6 +51,28 @@ def record(
     return unit.thermal.record(
         ThermalSample(board=board, at=at, millidegrees=millidegrees, source=source)
     )
+
+
+def record_batch(
+    unit: UnitOfWork,
+    readings: Sequence[tuple[str, datetime, int, str]],
+) -> tuple[ThermalSample, ...]:
+    """Store a whole controller's poll at once, or none of it.
+
+    Every board is checked before anything is written, so a batch naming a
+    board the bench does not have is refused rather than half stored. That
+    matters because the caller retries the batch, and a half stored batch
+    turns a retry into duplicate readings.
+    """
+    known = {board.tag for board in unit.boards.all()}
+    samples = []
+    for tag, at, millidegrees, source in readings:
+        parsed = ThermalSample(board=tag, at=at, millidegrees=millidegrees, source=source)
+        if parsed.board not in known:
+            raise NotFound("board", tag)
+        samples.append(parsed)
+    unit.thermal.record_many(samples)
+    return tuple(samples)
 
 
 def load_window(unit: UnitOfWork, now: datetime, length: timedelta) -> ThermalLog:

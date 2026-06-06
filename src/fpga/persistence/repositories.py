@@ -12,9 +12,10 @@ released lease counts as active.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.orm import Session, selectinload
 
 from fpga.access import ApiKey
@@ -673,6 +674,30 @@ class ThermalRepository:
             )
         )
         return sample
+
+    def record_many(self, samples: Sequence[ThermalSample]) -> int:
+        """Store a batch of readings in one insert, and say how many.
+
+        The rack controllers post a reading per board per poll, so a full
+        rack is twenty four rows every twenty seconds. Adding them one at a
+        time is twenty four round trips to say one thing, and this is the
+        hottest write path the bench has.
+        """
+        if not samples:
+            return 0
+        self.session.execute(
+            insert(ThermalRow),
+            [
+                {
+                    "board": sample.board,
+                    "at": sample.at,
+                    "millidegrees": sample.millidegrees,
+                    "source": sample.source,
+                }
+                for sample in samples
+            ],
+        )
+        return len(samples)
 
     def _of(self, row: ThermalRow) -> ThermalSample:
         return ThermalSample(

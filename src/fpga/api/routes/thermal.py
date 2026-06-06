@@ -34,16 +34,13 @@ def record_samples(
     _: ApiKey = Depends(needs("operator")),
 ) -> list[SampleOut]:
     """Store a batch of readings, all or nothing."""
-    stored = [
-        thermal_service.record(
-            unit,
-            reading.board,
-            reading.at or moment,
-            reading.millidegrees,
-            source=reading.source,
-        )
-        for reading in readings
-    ]
+    stored = thermal_service.record_batch(
+        unit,
+        [
+            (reading.board, reading.at or moment, reading.millidegrees, reading.source)
+            for reading in readings
+        ],
+    )
     return [SampleOut.of(sample) for sample in stored]
 
 
