@@ -48,8 +48,29 @@ from fpga.persistence.unit import BenchDatabase
 
 __all__ = [
     "build_app",
+    "retry_after_for",
     "status_for",
 ]
+
+# How long to tell a caller to wait, by what went wrong out in the lab.
+_RETRY_SECONDS: dict[str, int] = {
+    "power": 30,
+    "chain": 5,
+    "transient": 10,
+}
+_DEFAULT_RETRY = 10
+
+
+def retry_after_for(error: BenchError) -> int | None:
+    """How many seconds to tell a caller to wait, or nothing to not say.
+
+    Only transient errors get a number. Saying it for a conflict would be a
+    lie, because nothing about waiting makes a board somebody else is holding
+    free, and a client that retries on a 409 turns one mistake into a loop.
+    """
+    if not error.retryable:
+        return None
+    return _RETRY_SECONDS.get(error.code, _DEFAULT_RETRY)
 
 
 def status_for(error: BenchError) -> int:
@@ -89,7 +110,13 @@ def build_app(
 
     @app.exception_handler(BenchError)
     async def _bench_error(request: Request, error: BenchError) -> JSONResponse:
-        return JSONResponse(status_code=status_for(error), content={"error": error.as_dict()})
+        wait = retry_after_for(error)
+        headers = {} if wait is None else {"retry-after": str(wait)}
+        return JSONResponse(
+            status_code=status_for(error),
+            content={"error": error.as_dict()},
+            headers=headers,
+        )
 
     app.include_router(boards.router)
     app.include_router(leases.router)
