@@ -126,6 +126,10 @@ def return_to_service(
     The state move is the point. A board left in maintenance because somebody
     finished the work and forgot the second command is the most common way a
     board disappears off the bench for a week.
+
+    A board already available is left where it is rather than moved to where
+    it already is, because logging a calibration on a board nobody had taken
+    out of service is an ordinary thing to do and should not be an error.
     """
     record = log_visit(
         unit,
@@ -136,12 +140,13 @@ def return_to_service(
         notes=notes,
         faults_cleared=faults_cleared,
     )
-    inventory.move_state(
-        unit,
-        board,
-        "available",
-        at,
-        reason=notes or f"{kind} finished",
-        actor=by,
-    )
+    if unit.boards.state(board).state != "available":
+        inventory.move_state(
+            unit,
+            board,
+            "available",
+            at,
+            reason=notes or f"{kind} finished",
+            actor=by,
+        )
     return record
