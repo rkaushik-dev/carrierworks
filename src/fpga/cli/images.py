@@ -13,6 +13,7 @@ from typing import Any
 
 import click
 
+from fpga.artifacts.provenance import Provenance
 from fpga.artifacts.registry import ArtifactStore
 from fpga.bitstream.binary import pad_to, reverse_bits
 from fpga.bitstream.image import load_bitstream
@@ -308,5 +309,66 @@ def export(
             "bytes": len(data),
             "address": address,
             "spi": spi,
+        },
+    )
+
+
+@images_group.command("build")
+@click.argument("digest")
+@click.option("--revision", required=True, help="the git object the image was built from")
+@click.option("--build-id", required=True, help="what the build system calls this run")
+@click.option("--branch", default="", help="the branch it was built on")
+@click.option("--builder", default="", help="which machine built it")
+@click.option("--tool", "tool_version", default="", help="the toolchain version")
+@click.option("--constraints", "constraints_digest", default="", help="hash of the xdc files")
+@click.option("--dirty", is_flag=True, help="the working tree had uncommitted changes")
+@click.pass_obj
+@bench_command
+def record_build(
+    context: Context,
+    digest: str,
+    revision: str,
+    build_id: str,
+    branch: str,
+    builder: str,
+    tool_version: str,
+    constraints_digest: str,
+    dirty: bool,
+) -> None:
+    """Write down the build that produced an image.
+
+    Until this is recorded the bench knows an image exists and nothing about
+    where it came from, which is why an image with no build behind it cannot
+    be promoted to golden however well it runs. Two builds of the same source
+    that produce the same bytes are both recorded, and disagreeing revisions
+    for one image are what the promotion gate looks at.
+    """
+    with context.unit() as unit:
+        record = unit.artifacts.get(digest)
+        build = registry.record_build(
+            unit,
+            Provenance(
+                digest=record.digest,
+                design=record.design,
+                source_revision=revision,
+                build_id=build_id,
+                built_at=context.now.isoformat(timespec="seconds"),
+                tool_version=tool_version,
+                constraints_digest=constraints_digest,
+                builder=builder,
+                branch=branch,
+                dirty=dirty,
+            ),
+        )
+        builds = len(unit.provenance.for_digest(record.digest))
+    context.say(
+        f"{record.short_digest} built from {build.short_revision} as {build.build_id}",
+        {
+            "digest": build.digest,
+            "revision": build.source_revision,
+            "build_id": build.build_id,
+            "branch": build.branch,
+            "dirty": build.dirty,
+            "builds": builds,
         },
     )
