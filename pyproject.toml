@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fpga"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Bench control plane for an FPGA prototyping and hardware in the loop lab"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,13 +30,21 @@ dev = [
   "mypy==1.15.0",
 ]
 
+[tool.setuptools.dynamic]
+version = {attr = "fpga.__version__"}
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+fpga = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "tests"]
-addopts = "-q"
+# No addopts, and no -q in particular. pytest sums verbosity, so a -q here
+# cancels a -v on the command line and the per-test lines vanish from a run
+# that asked for them by name. Anything that wants quiet passes it itself.
 filterwarnings = [
   # Starlette's test client reaches for an anyio alias anyio has deprecated.
   # Not ours to fix, and not worth reading on every run.

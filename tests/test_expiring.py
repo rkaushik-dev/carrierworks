@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -16,6 +17,19 @@ from fpga.services import inventory, leasing
 
 def now():
     return datetime.now(UTC)
+
+
+def minutes_in(text):
+    """The minutes a line reports, out of "9m" or "runs out in 9 minutes".
+
+    These two cases run off the real clock rather than a frozen one, and the
+    bench floors the minutes it prints, so a lease with ten minutes left reads
+    as nine the moment any time passes. Both answers are right; asserting on
+    one of them is asserting on how fast this machine is.
+    """
+    found = re.search(r"(\d+)\s*m(?:inutes?)?\b", text)
+    assert found is not None, text
+    return int(found.group(1))
 
 
 @pytest.fixture()
@@ -113,7 +127,7 @@ def test_the_reminder_says_who_and_how_long(database):
         trail = unit.audit.for_subject("bx-14")
     detail = next(line.detail for line in trail if line.actor == "bench")
     assert "team-b" in detail
-    assert "runs out in 9 minutes" in detail
+    assert minutes_in(detail) in (9, 10)
 
 
 def test_nothing_expiring_writes_nothing(database):
@@ -129,7 +143,7 @@ def test_the_command_lists_what_is_about_to_go(run, database):
     hold(database, minutes=60, ago=50)
     body = json.loads(run("--json", "lease", "expiring").output)
     assert body[0]["asset"] == "bx-14"
-    assert body[0]["left"] == "9m"
+    assert minutes_in(body[0]["left"]) in (9, 10)
 
 
 def test_the_command_window_can_be_widened(run, database):
