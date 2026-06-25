@@ -11,6 +11,12 @@ as long as it takes to run.
 
 Neither applies to postgres, and neither does any harm there, so the listener
 checks the dialect rather than the configuration.
+
+There is a third listener and it is not about sqlite at all. A database that
+has never been migrated answers every query with an operational error, and
+that error escapes as a driver traceback in front of whoever ran the command.
+It is the single most likely thing to go wrong on a fresh site, so it is
+translated once here rather than caught in every caller.
 """
 
 from __future__ import annotations
@@ -20,10 +26,12 @@ from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from fpga.config import BenchSettings
+from fpga.errors import ConfigurationError
 from fpga.persistence.models import Base
 
 __all__ = [
@@ -31,6 +39,7 @@ __all__ = [
     "create_schema",
     "session_factory",
     "session_scope",
+    "unusable_database",
 ]
 
 
@@ -58,7 +67,36 @@ def build_engine(settings: BenchSettings | None = None, *, echo: bool = False) -
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.close()
 
+    @event.listens_for(engine, "handle_error")
+    def _on_error(context: Any) -> None:
+        raised = context.sqlalchemy_exception
+        if isinstance(raised, OperationalError):
+            raise unusable_database(raised)
+
     return engine
+
+
+def unusable_database(failure: OperationalError) -> ConfigurationError:
+    """The bench error for a database that cannot answer a query at all.
+
+    Two things reach here and they want different sentences. A database whose
+    tables are missing has not been migrated, and saying so is the whole
+    answer. Anything else is a file that cannot be opened, a server that is
+    not there, or a lock nobody released, and the driver's own first line says
+    more about which than the bench can.
+    """
+    detail = str(failure.orig or failure).strip().splitlines()[0]
+    if "no such table" in detail or "does not exist" in detail:
+        return ConfigurationError(
+            "that database has no schema yet, run alembic upgrade head",
+            setting="database_url",
+            detail=detail,
+        )
+    return ConfigurationError(
+        "that database could not be used",
+        setting="database_url",
+        detail=detail,
+    )
 
 
 def create_schema(engine: Engine) -> None:

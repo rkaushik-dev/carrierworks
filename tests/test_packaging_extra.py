@@ -84,19 +84,13 @@ def test_the_groups_registered_in_process_match_the_ones_advertised():
 
 
 def test_a_command_that_needs_a_database_fails_cleanly_not_with_a_traceback(tmp_path):
-    finished = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "fpga",
-            "--database",
-            "sqlite+pysqlite:///nothing.db",
-            "boards",
-            "list",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
+    finished = run_module(
+        "--database",
+        "sqlite+pysqlite:///nothing.db",
+        "boards",
+        "list",
         cwd=tmp_path,
     )
+    assert finished.returncode == 1
     assert "Traceback" not in finished.stderr
+    assert "no schema yet" in finished.stderr
