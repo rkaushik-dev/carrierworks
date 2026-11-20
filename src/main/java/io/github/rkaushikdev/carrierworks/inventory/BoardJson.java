@@ -5,11 +5,13 @@ import static io.github.rkaushikdev.carrierworks.util.JsonValues.text;
 import static io.github.rkaushikdev.carrierworks.util.JsonValues.truthy;
 import static io.github.rkaushikdev.carrierworks.util.JsonValues.whole;
 
+import io.github.rkaushikdev.carrierworks.BenchError;
 import io.github.rkaushikdev.carrierworks.ConfigurationError;
 import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.PduChannel;
 import io.github.rkaushikdev.carrierworks.ValidationError;
 import io.github.rkaushikdev.carrierworks.jtag.AdapterUnit;
+import io.github.rkaushikdev.carrierworks.util.JsonValues;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -25,9 +27,9 @@ import java.util.Optional;
  * the same shape is how they drift.
  *
  * <p>Everything optional is omitted rather than written as {@code null}. A bench file that somebody
- * edits by hand should not be full of nulls for the cables that are not plugged in today. Reading is
- * as forgiving as {@link io.github.rkaushikdev.carrierworks.util.JsonValues} is: a field holding
- * {@code null}, an empty string or zero counts as left out, and numbers may arrive as text.
+ * edits by hand should not be full of nulls for the cables that are not plugged in today. Reading
+ * is forgiving in the way {@link JsonValues} describes: a required field, the cable or the outlet
+ * holding {@code null}, an empty string or zero counts as left out, and numbers may arrive as text.
  */
 public final class BoardJson {
 
@@ -38,13 +40,14 @@ public final class BoardJson {
     /**
      * One board out of its JSON object.
      *
-     * <p>Anything but a missing field or a board that does not hold together comes out as whatever
-     * the failing read raised; the bench file wraps those with the board it was reading.
+     * <p>A missing field, and a board whose parts do not go together, are configuration errors. Any
+     * other failure comes out as it was raised, and the bench file wraps it with the board it was
+     * reading.
      *
      * @throws ConfigurationError naming the board and every missing field when a required one is
      *     left out, or when the board's own checks refuse it
-     * @throws ValidationError when a slot or the cable is not an object or lacks a member, or a value
-     *     does not read as what it names
+     * @throws BenchError when a value does not read as what it names, or a slot or the cable is not
+     *     an object with the members it needs
      * @throws IllegalArgumentException when a number does not read as a whole one
      * @throws ArithmeticException when a whole number is too large for its field
      */
