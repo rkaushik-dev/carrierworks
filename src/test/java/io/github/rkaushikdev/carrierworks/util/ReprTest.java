@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** The quoted forms, checked against what the original bench printed for the same values. */
+/** The quoted forms error messages and details show values in. */
 class ReprTest {
 
     @Test

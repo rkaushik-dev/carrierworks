@@ -157,8 +157,8 @@ class ConfigTest {
     }
 
     /**
-     * The original refused assignment to a field at run time. A record has no setters and every
-     * component field is final, so the same guarantee is checked here by reflection.
+     * Settings cannot be changed once built. A record has no setters and every component field is
+     * final, so the guarantee is checked by reflection.
      */
     @Test
     void settingsAreFrozen() {

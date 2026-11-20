@@ -18,7 +18,7 @@ import java.util.Locale;
  * <p>Every moment the bench keeps is UTC, held as an {@link Instant} to the microsecond, which is
  * as fine as the database stores one. Written out it carries an explicit {@code +00:00} rather
  * than a {@code Z}, the seconds always, and a fraction only when there is one, so the journal and
- * the audit trail read the same as they always have.
+ * the audit trail keep one stable form.
  */
 public final class Times {
 

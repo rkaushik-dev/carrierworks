@@ -8,10 +8,11 @@ import java.util.Optional;
 /**
  * The quoted form a message shows a value in.
  *
- * <p>Error messages and error details on the bench have always quoted what they were given the
- * same way: a string in single quotes with its awkward characters escaped, a number as itself, a
- * missing value as {@code None} and a flag as {@code True} or {@code False}. Operators grep the job
- * logs for those lines, so the form is kept exactly rather than left to {@code toString}.
+ * <p>Error messages and error details quote what they were given one fixed way: a string in single
+ * quotes (double quotes when it holds a single one) with its awkward characters escaped, a number
+ * as itself, a missing value as {@code None} and a flag as {@code True} or {@code False}. Operators
+ * grep the job logs for those lines, so the form is fixed here rather than left to {@code
+ * toString}.
  */
 public final class Repr {
 

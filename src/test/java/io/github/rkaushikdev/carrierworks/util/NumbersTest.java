@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
-/** The printed and rounded forms, each expected value taken from the original's own output. */
+/** The printed and rounded forms, half to even on the exact binary value. */
 class NumbersTest {
 
     @ParameterizedTest

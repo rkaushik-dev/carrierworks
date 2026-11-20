@@ -72,9 +72,9 @@ class BenchCalendarTest {
     }
 
     /**
-     * The original refused a timestamp with no zone at run time. Here the calendar takes an {@link
-     * Instant}, which is always a moment in UTC, so a zoneless time cannot be handed in at all; the
-     * test holds the signature to that.
+     * A timestamp with no zone is refused. The calendar takes an {@link Instant}, which is always a
+     * moment in UTC, so a zoneless time cannot be handed in at all; the test holds the signature to
+     * that.
      */
     @Test
     void aNaiveTimestampIsRefused() throws NoSuchMethodException {

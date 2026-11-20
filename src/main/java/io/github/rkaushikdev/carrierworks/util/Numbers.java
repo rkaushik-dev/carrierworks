@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 /**
- * Rounding and printing numbers the way the bench always has.
+ * Rounding and printing numbers half to even on their exact binary value.
  *
  * <p>Two rules, both about the exact binary value rather than the decimal one a person reads. A
  * figure printed to a fixed number of places is rounded half to even on the value the double

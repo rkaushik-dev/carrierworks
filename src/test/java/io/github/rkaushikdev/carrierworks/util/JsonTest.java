@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** The JSON text, byte for byte what the original bench wrote for the same values. */
+/** The JSON text, byte for byte, in the bench's established layout. */
 class JsonTest {
 
     private static Map<String, Object> sample() {

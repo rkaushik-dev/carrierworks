@@ -20,11 +20,11 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * JSON in the exact text the bench has always written, and back again.
+ * JSON in one fixed text form, and back again.
  *
  * <p>The journal, the wear ledger, the provenance files, the bench export and the bundle manifests
  * are all JSON that lives on disk for years, and the bundle manifest is hashed. So the writer here
- * produces the same bytes the bench always produced: {@code ", "} and {@code ": "} between items on
+ * produces one canonical layout whose bytes never vary: {@code ", "} and {@code ": "} between items on
  * one line, {@code ","} and a newline per item when indented, every character outside printable
  * ASCII escaped as {@code \u0000}, and floats in their shortest form. Keys keep the order they were
  * put in unless the writer is told to sort them.

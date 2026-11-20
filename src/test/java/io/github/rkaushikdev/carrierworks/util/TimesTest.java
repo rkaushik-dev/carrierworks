@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** Timestamps, each expected text taken from the original's own output for the same moment. */
+/** Timestamps in the bench's text form, and back. */
 class TimesTest {
 
     private static final Instant MOMENT = Instant.parse("2026-01-15T02:00:00Z");
