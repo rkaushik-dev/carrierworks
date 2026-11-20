@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.carrierworks.inventory;
 
 import io.github.rkaushikdev.carrierworks.AssetTag;
+import io.github.rkaushikdev.carrierworks.BoardRegistry;
 import io.github.rkaushikdev.carrierworks.ConfigurationError;
 import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.NotFound;
@@ -34,7 +35,7 @@ import java.util.Optional;
  *
  * <p>Listings come back sorted by the tag's text, so {@code bx-10} comes before {@code bx-9}.
  */
-public final class BoardBook {
+public final class BoardBook implements BoardRegistry {
 
     /** The reason a board added out of service carries when nobody gave one. */
     public static final String ADDED_REASON = "added to the bench";
@@ -157,6 +158,7 @@ public final class BoardBook {
     }
 
     /** One board by tag, however the tag was written, or a not found. */
+    @Override
     public Board board(String tag) {
         String key = AssetTag.parse(tag).toString();
         Board found = boards.get(key);
@@ -167,21 +169,25 @@ public final class BoardBook {
     }
 
     /** Whether a board with this tag is in the book. */
+    @Override
     public boolean has(String tag) {
         return boards.containsKey(AssetTag.parse(tag).toString());
     }
 
     /** Where one board is now, or a not found. */
+    @Override
     public BoardState state(String tag) {
         return states.get(board(tag).tag());
     }
 
     /** {@link #moveTo(String, BoardStatus, Instant, String, String)} with no reason and nobody named. */
+    @Override
     public BoardState moveTo(String tag, BoardStatus target, Instant when) {
         return moveTo(tag, target, when, "", "");
     }
 
     /** {@link #moveTo(String, BoardStatus, Instant, String, String)} with nobody named. */
+    @Override
     public BoardState moveTo(String tag, BoardStatus target, Instant when, String reason) {
         return moveTo(tag, target, when, reason, "");
     }
@@ -191,6 +197,7 @@ public final class BoardBook {
      *
      * @throws ValidationError when the state machine refuses the move
      */
+    @Override
     public BoardState moveTo(String tag, BoardStatus target, Instant when, String reason, String actor) {
         String key = board(tag).tag();
         BoardState moved = states.get(key).move(target, when, reason, actor);
@@ -199,6 +206,7 @@ public final class BoardBook {
     }
 
     /** Every board, sorted by tag. */
+    @Override
     public List<Board> all() {
         return tags().stream().map(boards::get).toList();
     }
@@ -214,6 +222,7 @@ public final class BoardBook {
     }
 
     /** Every board in one state, sorted by tag. */
+    @Override
     public List<Board> inState(BoardStatus state) {
         return all().stream()
                 .filter(board -> states.get(board.tag()).state() == state)

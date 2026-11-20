@@ -2,6 +2,7 @@ package io.github.rkaushikdev.carrierworks.jobs;
 
 import io.github.rkaushikdev.carrierworks.IdFactory;
 import io.github.rkaushikdev.carrierworks.Ids;
+import io.github.rkaushikdev.carrierworks.JobLedger;
 import io.github.rkaushikdev.carrierworks.NotFound;
 import io.github.rkaushikdev.carrierworks.Records;
 import io.github.rkaushikdev.carrierworks.ValidationError;
@@ -29,7 +30,7 @@ import java.util.TreeMap;
  * which it will not be offered, so the runner does not have to sleep and the backoff survives a
  * restart of whatever is calling it.
  */
-public final class JobStore {
+public final class JobStore implements JobLedger {
 
     private static final Comparator<ProgramJob> OLDEST_FIRST =
             Comparator.comparing(ProgramJob::createdAt).thenComparing(ProgramJob::id);
@@ -64,6 +65,7 @@ public final class JobStore {
     }
 
     /** One job by id, or a not found. */
+    @Override
     public ProgramJob job(String jobId) {
         String id = Ids.slug(jobId);
         ProgramJob found = jobs.get(id);
@@ -74,6 +76,7 @@ public final class JobStore {
     }
 
     /** Write a job back after the runner has moved it along; a finished job forgets its backoff. */
+    @Override
     public ProgramJob update(ProgramJob job) {
         if (!jobs.containsKey(job.id())) {
             throw new NotFound("job", job.id());

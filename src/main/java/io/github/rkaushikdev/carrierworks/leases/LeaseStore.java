@@ -5,6 +5,7 @@ import io.github.rkaushikdev.carrierworks.Conflict;
 import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.IdFactory;
 import io.github.rkaushikdev.carrierworks.Ids;
+import io.github.rkaushikdev.carrierworks.LeaseRegistry;
 import io.github.rkaushikdev.carrierworks.NotFound;
 import io.github.rkaushikdev.carrierworks.ValidationError;
 import io.github.rkaushikdev.carrierworks.util.Times;
@@ -33,7 +34,7 @@ import java.util.TreeSet;
  *
  * <p>Listings come back oldest first: by when the lease was taken, then by id.
  */
-public final class LeaseStore {
+public final class LeaseStore implements LeaseRegistry {
 
     /** How long a lease lasts when the caller does not say. */
     public static final int DEFAULT_MINUTES = 60;
@@ -136,11 +137,13 @@ public final class LeaseStore {
     }
 
     /** Close a lease with the plain reason. */
+    @Override
     public Lease release(String leaseId, Instant now) {
         return release(leaseId, now, Lease.RELEASED);
     }
 
     /** Close a lease and keep the closed form. */
+    @Override
     public Lease release(String leaseId, Instant now, String reason) {
         Lease closed = lease(leaseId).release(now, reason);
         leases.put(closed.id(), closed);
@@ -155,6 +158,7 @@ public final class LeaseStore {
     }
 
     /** The lease holding this board right now, if there is one. */
+    @Override
     public Optional<Lease> forBoard(String board, Instant now) {
         String tag = AssetTag.parse(board).toString();
         return leases.values().stream()
