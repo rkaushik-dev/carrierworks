@@ -1,9 +1,6 @@
 package io.github.rkaushikdev.carrierworks;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
+import io.github.rkaushikdev.carrierworks.util.Digests;
 
 /**
  * Who is allowed to do what, as three roles and one hash.
@@ -21,13 +18,7 @@ public final class Access {
         if (secret.isBlank()) {
             throw new ValidationError("a key has a secret", "secret");
         }
-        try {
-            byte[] digest =
-                    MessageDigest.getInstance("SHA-256").digest(secret.strip().getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException missing) {
-            throw new IllegalStateException("every Java runtime carries SHA-256", missing);
-        }
+        return Digests.sha256(secret.strip());
     }
 
     /** Check a key carries a role, and say what it would have needed. */
