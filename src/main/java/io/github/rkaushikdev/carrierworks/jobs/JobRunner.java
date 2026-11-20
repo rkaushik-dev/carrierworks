@@ -226,7 +226,7 @@ public final class JobRunner {
     }
 
     /** The fault kind the quarantine policy counts an error under, by the error's code. */
-    static FaultKind faultKind(String code) {
+    private static FaultKind faultKind(String code) {
         return switch (code) {
             case "chain" -> FaultKind.CHAIN;
             case "programming" -> FaultKind.PROGRAM;

@@ -55,7 +55,7 @@ public final class Gates {
     }
 
     /** Which channels a mode will take images from, least trusted first. */
-    static List<Channel> allowedChannels(JobMode mode) {
+    private static List<Channel> allowedChannels(JobMode mode) {
         return switch (mode) {
             case JTAG -> List.of(Channel.DEV, Channel.QUAL, Channel.GOLDEN);
             case FLASH_UPDATE -> List.of(Channel.QUAL, Channel.GOLDEN);
