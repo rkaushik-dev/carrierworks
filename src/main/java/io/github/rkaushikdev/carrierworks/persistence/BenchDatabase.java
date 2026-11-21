@@ -60,6 +60,11 @@ public final class BenchDatabase implements AutoCloseable {
         engine.createSchema();
     }
 
+    /** Build the schema, or bring an older one up to date, and say what that took. */
+    public SchemaUpgrade upgrade() {
+        return engine.upgrade();
+    }
+
     /** A unit of work, not yet open. */
     public UnitOfWork unit() {
         return new UnitOfWork(() -> engine.sessions().createEntityManager());

@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.FlywayException;
 import org.hibernate.tool.schema.spi.SchemaManagementException;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
@@ -129,6 +130,39 @@ public final class Engine implements AutoCloseable {
     /** Build every table, which is what the tests and a fresh site do. */
     public void createSchema() {
         flyway().migrate();
+    }
+
+    /**
+     * Build the schema on an empty database, or bring an older one up to the newest version.
+     *
+     * @throws ConfigurationError when the database cannot be reached or used at all
+     */
+    public SchemaUpgrade upgrade() {
+        try {
+            Flyway migrations = flyway();
+            Optional<String> from = currentVersion(migrations);
+            int applied = migrations.migrate().migrationsExecuted;
+            return new SchemaUpgrade(from, currentVersion(migrations).orElseThrow(), applied);
+        } catch (FlywayException failure) {
+            throw unusable(failure)
+                    .or(() -> sqlCause(failure).map(Engine::unusableDatabase))
+                    .orElseThrow(() -> failure);
+        }
+    }
+
+    /** The database's own failure underneath a migration that could not run, if that is what it was. */
+    private static Optional<SQLException> sqlCause(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql) {
+                return Optional.of(sql);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<String> currentVersion(Flyway migrations) {
+        return Optional.ofNullable(migrations.info().current())
+                .map(applied -> applied.getVersion().getVersion());
     }
 
     /** Take every table out again. */

@@ -137,7 +137,11 @@ final class Context implements AutoCloseable {
         out.print(text);
     }
 
-    private BenchDatabase database() {
+    /**
+     * The database itself, opened on first use, for the one command that works on its schema
+     * rather than in a unit of work.
+     */
+    BenchDatabase database() {
         if (database == null) {
             database = new BenchDatabase(settings);
         }

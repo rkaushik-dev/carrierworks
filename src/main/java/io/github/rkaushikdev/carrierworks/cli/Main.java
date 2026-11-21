@@ -46,6 +46,7 @@ import picocli.CommandLine.TypeConversionException;
             AuditCommand.class,
             BoardCommands.class,
             ChainCommands.class,
+            DbCommands.class,
             FlashCommands.class,
             ImageCommands.class,
             JobCommands.class,
