@@ -170,7 +170,7 @@ final class BoardCommands {
     @Command(name = "import", description = "Put every board in a bench file onto the bench.")
     static final class ImportBoards extends BenchCommand {
 
-        @Parameters(paramLabel = "PATH", converter = ExistingFile.class)
+        @Parameters(paramLabel = "PATH", converter = FileArgument.Existing.class)
         private Path path;
 
         @Option(names = "--replace", description = "overwrite boards the bench already has")
