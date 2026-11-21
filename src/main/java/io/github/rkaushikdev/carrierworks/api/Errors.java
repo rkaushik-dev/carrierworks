@@ -50,7 +50,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 public class Errors {
 
     /** What a request is told about a field or parameter it left out that has no default. */
-    static final String REQUIRED = "a value is required";
+    public static final String REQUIRED = "a value is required";
 
     // How long to tell a caller to wait, by what went wrong out in the lab.
     private static final Map<String, Integer> RETRY_SECONDS = Map.of("power", 30, "chain", 5, "transient", 10);

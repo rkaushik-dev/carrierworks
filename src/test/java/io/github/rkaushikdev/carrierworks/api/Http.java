@@ -4,8 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.UncheckedIOException;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -37,36 +39,59 @@ public final class Http {
     }
 
     public Answer get(String path) {
-        return send(MockMvcRequestBuilders.get(path));
+        return send(request(HttpMethod.GET, path));
     }
 
     public Answer post(String path) {
-        return send(MockMvcRequestBuilders.post(path));
+        return send(request(HttpMethod.POST, path));
     }
 
     public Answer postJson(String path, Object body) {
-        return send(MockMvcRequestBuilders.post(path)
+        return send(request(HttpMethod.POST, path)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(write(body)));
     }
 
     /** A post whose body is raw bytes of the type given. */
     public Answer postBytes(String path, byte[] body, MediaType type) {
-        return send(MockMvcRequestBuilders.post(path).contentType(type).content(body));
+        return send(request(HttpMethod.POST, path).contentType(type).content(body));
     }
 
     public Answer put(String path) {
-        return send(MockMvcRequestBuilders.put(path));
+        return send(request(HttpMethod.PUT, path));
     }
 
     public Answer putJson(String path, Object body) {
-        return send(MockMvcRequestBuilders.put(path)
+        return send(request(HttpMethod.PUT, path)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(write(body)));
     }
 
     public Answer delete(String path) {
-        return send(MockMvcRequestBuilders.delete(path));
+        return send(request(HttpMethod.DELETE, path));
+    }
+
+    /**
+     * A request for a path that may carry a query string, read the way a servlet container reads
+     * one: each name and value percent decoded, with a {@code +} standing for a space.
+     */
+    private static MockHttpServletRequestBuilder request(HttpMethod method, String path) {
+        int mark = path.indexOf('?');
+        if (mark < 0) {
+            return MockMvcRequestBuilders.request(method, path);
+        }
+        MockHttpServletRequestBuilder request = MockMvcRequestBuilders.request(method, path.substring(0, mark));
+        for (String pair : path.substring(mark + 1).split("&")) {
+            if (pair.isEmpty()) {
+                continue;
+            }
+            int equals = pair.indexOf('=');
+            String name = equals < 0 ? pair : pair.substring(0, equals);
+            String value = equals < 0 ? "" : pair.substring(equals + 1);
+            request.param(
+                    URLDecoder.decode(name, StandardCharsets.UTF_8), URLDecoder.decode(value, StandardCharsets.UTF_8));
+        }
+        return request;
     }
 
     /** Send a request built by hand, with this client's key. */
