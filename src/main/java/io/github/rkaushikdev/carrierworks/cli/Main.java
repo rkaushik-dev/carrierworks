@@ -41,9 +41,12 @@ import picocli.CommandLine.ParseResult;
         subcommands = {
             AuditCommand.class,
             BoardCommands.class,
+            ChainCommands.class,
+            FlashCommands.class,
             ImageCommands.class,
             JobCommands.class,
             LeaseCommands.class,
+            PowerCommands.class,
             Main.Version.class
         })
 public final class Main {
