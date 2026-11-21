@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.carrierworks.api;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.github.rkaushikdev.carrierworks.leases.Lease;
 import jakarta.validation.constraints.NotNull;
 import java.util.Objects;
@@ -18,8 +19,8 @@ public record LeaseIn(
         @NotNull(message = Errors.REQUIRED) String holder,
         @NotNull(message = Errors.REQUIRED) String purpose,
         OptionalInt minutes,
-        Integer priority,
-        Boolean preemptible) {
+        @JsonDeserialize(using = Defaulted.class) Integer priority,
+        @JsonDeserialize(using = Defaulted.class) Boolean preemptible) {
 
     public LeaseIn {
         minutes = Objects.requireNonNullElse(minutes, OptionalInt.empty());

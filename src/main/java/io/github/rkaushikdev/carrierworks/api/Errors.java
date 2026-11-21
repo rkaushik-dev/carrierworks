@@ -1,6 +1,8 @@
 package io.github.rkaushikdev.carrierworks.api;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.exc.InvalidNullException;
 import io.github.rkaushikdev.carrierworks.BenchError;
 import io.github.rkaushikdev.carrierworks.ConfigurationError;
 import io.github.rkaushikdev.carrierworks.Conflict;
@@ -54,6 +56,9 @@ public class Errors {
 
     /** What a request is told about a field or parameter it left out that has no default. */
     public static final String REQUIRED = "a value is required";
+
+    /** What a refused field is told when it was sent as null and only takes a value. */
+    public static final String NOT_NULL = "that field takes a value, not null";
 
     private static final PropertyNamingStrategies.NamingBase WIRE = new PropertyNamingStrategies.SnakeCaseStrategy();
 
@@ -141,9 +146,21 @@ public class Errors {
                 problems.add(problem(missing.getParameterName(), REQUIRED));
             case MethodArgumentTypeMismatchException mismatch ->
                 problems.add(problem(mismatch.getName(), "that is not a usable value"));
+            case HttpMessageNotReadableException unreadable
+            when unreadable.getCause() instanceof InvalidNullException refused ->
+                problems.add(problem(where(refused), NOT_NULL));
             default -> problems.add(problem("body", firstLine(failure.getMessage())));
         }
         return problems;
+    }
+
+    /** Where in the body a refused value was, as the request spelled it: {@code slots.0.name}. */
+    private static String where(JsonMappingException refused) {
+        List<String> steps = new ArrayList<>();
+        for (JsonMappingException.Reference step : refused.getPath()) {
+            steps.add(step.getFieldName() == null ? String.valueOf(step.getIndex()) : step.getFieldName());
+        }
+        return steps.isEmpty() ? "body" : String.join(".", steps);
     }
 
     /** A field the way the wire spells it, which is snake case, however the record names it. */

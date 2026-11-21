@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.carrierworks.api;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.github.rkaushikdev.carrierworks.leases.Lease;
 import io.github.rkaushikdev.carrierworks.scheduling.Request;
 import jakarta.validation.constraints.Max;
@@ -24,11 +25,11 @@ import java.util.Objects;
 public record RequestIn(
         @NotNull(message = Errors.REQUIRED) String holder,
         @NotNull(message = Errors.REQUIRED) String purpose,
-        String needs,
-        @Min(Lease.MIN_PRIORITY) @Max(Lease.MAX_PRIORITY) Integer priority,
-        @Positive Integer minutes,
-        Boolean preemptible,
-        Boolean needsHands) {
+        @JsonDeserialize(using = Defaulted.class) String needs,
+        @JsonDeserialize(using = Defaulted.class) @Min(Lease.MIN_PRIORITY) @Max(Lease.MAX_PRIORITY) Integer priority,
+        @JsonDeserialize(using = Defaulted.class) @Positive Integer minutes,
+        @JsonDeserialize(using = Defaulted.class) Boolean preemptible,
+        @JsonDeserialize(using = Defaulted.class) Boolean needsHands) {
 
     public RequestIn {
         needs = Objects.requireNonNullElse(needs, "");

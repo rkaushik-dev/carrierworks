@@ -12,6 +12,9 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
  * <p>Field names are snake case, timestamps are ISO 8601 in UTC, a missing value is {@code null},
  * and every state, mode and kind goes over the wire as the name the bench stores it under, which
  * is what each of those types prints as.
+ *
+ * <p>A request field with a default takes it when the field is left out. Sending such a field as
+ * {@code null} is refused rather than read as "the default", because null is not one of its values.
  */
 public final class ApiJson {
 

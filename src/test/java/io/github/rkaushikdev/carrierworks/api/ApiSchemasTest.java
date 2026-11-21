@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.carrierworks.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -20,13 +21,18 @@ import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class ApiSchemasTest {
 
@@ -196,6 +202,64 @@ class ApiSchemasTest {
     @Test
     void theSettingsDependencyHandsBackWhatTheAppHolds() {
         assertThat(asMap(bench.http().get("/site"))).isEqualTo(Map.of("site", "lab-c"));
+    }
+
+    /** Each shape's required fields, and one field of it that has a default. */
+    static Stream<Arguments> defaultedFields() {
+        Map<String, Object> board = Map.of(
+                "asset", "bx-14",
+                "model", "rx-carrier-b",
+                "part", "XC7K325T-2FFG900I",
+                "flash", "n25q128a13",
+                "location", "rack-2/shelf-04/slot-3");
+        Map<String, Object> state = Map.of("state", "maintenance");
+        Map<String, Object> lease = Map.of("holder", "team-a", "purpose", "capture");
+        Map<String, Object> job = Map.of("board", "bx-14", "digest", "ab12", "requested_by", "team-a");
+        Map<String, Object> sample = Map.of("board", "bx-14", "millidegrees", 41_000);
+        Map<String, Object> request = Map.of("holder", "team-a", "purpose", "capture");
+        return Stream.of(
+                Arguments.of(BoardIn.class, board, "revision"),
+                Arguments.of(BoardIn.class, board, "slots"),
+                Arguments.of(BoardIn.class, board, "vadj_millivolts"),
+                Arguments.of(BoardIn.class, board, "header_voltage_mv"),
+                Arguments.of(BoardIn.class, board, "max_tck_hz"),
+                Arguments.of(BoardIn.class, board, "notes"),
+                Arguments.of(StateIn.class, state, "reason"),
+                Arguments.of(StateIn.class, state, "actor"),
+                Arguments.of(LeaseIn.class, lease, "priority"),
+                Arguments.of(LeaseIn.class, lease, "preemptible"),
+                Arguments.of(JobIn.class, job, "mode"),
+                Arguments.of(JobIn.class, job, "verify"),
+                Arguments.of(SampleIn.class, sample, "source"),
+                Arguments.of(RequestIn.class, request, "needs"),
+                Arguments.of(RequestIn.class, request, "priority"),
+                Arguments.of(RequestIn.class, request, "minutes"),
+                Arguments.of(RequestIn.class, request, "preemptible"),
+                Arguments.of(RequestIn.class, request, "needs_hands"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("defaultedFields")
+    void aFieldWithADefaultTakesItWhenLeftOutButRefusesNull(
+            Class<?> shape, Map<String, Object> required, String field) {
+        assertThat(read(required, shape)).isNotNull();
+        Map<String, Object> sent = new HashMap<>(required);
+        sent.put(field, null);
+        assertThatThrownBy(() -> read(sent, shape))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("\"" + field + "\"");
+    }
+
+    @Test
+    void aNullSentForAFieldWithADefaultIsRefusedByName() {
+        Map<String, Object> sent = new HashMap<>();
+        sent.put("state", "maintenance");
+        sent.put("reason", null);
+        Http.Answer refused = bench.http().postJson("/boards/bx-14/state", sent);
+        assertThat(refused.status()).isEqualTo(422);
+        assertThat(refused.json().at("/error/details/problems/0/where").asText())
+                .isEqualTo("reason");
+        assertThat(refused.json().at("/error/details/problems/0/why").asText()).isEqualTo(Errors.NOT_NULL);
     }
 
     private static Map<String, Object> asMap(Http.Answer answer) {

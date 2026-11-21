@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.carrierworks.api;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.github.rkaushikdev.carrierworks.inventory.Board;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -38,15 +39,15 @@ public record BoardIn(
         @NotNull(message = Errors.REQUIRED) String part,
         @NotNull(message = Errors.REQUIRED) String flash,
         @NotNull(message = Errors.REQUIRED) String location,
-        String revision,
-        @Valid List<SlotIn> slots,
+        @JsonDeserialize(using = Defaulted.class) String revision,
+        @JsonDeserialize(using = Defaulted.class) @Valid List<SlotIn> slots,
         Optional<String> adapterSerial,
         Optional<String> adapterModel,
         Optional<String> pdu,
-        Integer vadjMillivolts,
-        Integer headerVoltageMv,
-        Integer maxTckHz,
-        String notes) {
+        @JsonDeserialize(using = Defaulted.class) Integer vadjMillivolts,
+        @JsonDeserialize(using = Defaulted.class) Integer headerVoltageMv,
+        @JsonDeserialize(using = Defaulted.class) Integer maxTckHz,
+        @JsonDeserialize(using = Defaulted.class) String notes) {
 
     public BoardIn {
         revision = Objects.requireNonNullElse(revision, Board.DEFAULT_REVISION);

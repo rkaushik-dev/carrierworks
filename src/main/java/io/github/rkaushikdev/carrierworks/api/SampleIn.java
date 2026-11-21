@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.carrierworks.api;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.github.rkaushikdev.carrierworks.thermal.ThermalSample;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
@@ -22,7 +23,7 @@ public record SampleIn(
         @NotNull(message = Errors.REQUIRED) String board,
         @NotNull(message = Errors.REQUIRED) Integer millidegrees,
         Optional<Instant> at,
-        String source) {
+        @JsonDeserialize(using = Defaulted.class) String source) {
 
     public SampleIn {
         at = Objects.requireNonNullElse(at, Optional.empty());

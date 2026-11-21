@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.carrierworks.api;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.github.rkaushikdev.carrierworks.jobs.JobMode;
 import jakarta.validation.constraints.NotNull;
 import java.util.Objects;
@@ -16,9 +17,9 @@ import java.util.Objects;
 public record JobIn(
         @NotNull(message = Errors.REQUIRED) String board,
         @NotNull(message = Errors.REQUIRED) String digest,
-        String mode,
+        @JsonDeserialize(using = Defaulted.class) String mode,
         @NotNull(message = Errors.REQUIRED) String requestedBy,
-        Boolean verify) {
+        @JsonDeserialize(using = Defaulted.class) Boolean verify) {
 
     public JobIn {
         mode = Objects.requireNonNullElse(mode, JobMode.JTAG.value());
