@@ -42,6 +42,7 @@ import picocli.CommandLine.ParseResult;
             AuditCommand.class,
             BoardCommands.class,
             ImageCommands.class,
+            JobCommands.class,
             LeaseCommands.class,
             Main.Version.class
         })
