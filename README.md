@@ -1,5 +1,11 @@
 # carrierworks
 
+[![CI](https://github.com/rkaushik-dev/carrierworks/actions/workflows/ci.yml/badge.svg)](https://github.com/rkaushik-dev/carrierworks/actions/workflows/ci.yml)
+![Java 21](https://img.shields.io/badge/Java-21-007396)
+![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F)
+![Maven](https://img.shields.io/badge/build-Maven-C71A36)
+![JUnit 5](https://img.shields.io/badge/tests-JUnit%205-25A162)
+
 Bench control plane for an FPGA prototyping lab. It tracks the boards in the
 racks, what is fitted to them, what is loaded on them, who holds them, how hot
 they are, and whether the bitstream about to go on one is allowed anywhere
