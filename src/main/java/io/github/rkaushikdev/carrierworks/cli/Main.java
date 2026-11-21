@@ -53,6 +53,7 @@ import picocli.CommandLine.TypeConversionException;
             LeaseCommands.class,
             PowerCommands.class,
             QueueCommands.class,
+            ServeCommand.class,
             StatusCommand.class,
             ThermalCommands.class,
             UpkeepCommands.class,

@@ -132,6 +132,11 @@ final class Context implements AutoCloseable {
         out.print('\n');
     }
 
+    /** Send what has been printed so far, for a command that keeps running after it speaks. */
+    void flush() {
+        out.flush();
+    }
+
     /** Print text exactly as given, with no line end added. */
     void write(String text) {
         out.print(text);
