@@ -87,8 +87,16 @@ class ApiQueueTest {
 
     @Test
     void aPriorityOutsideTheRangeIsRefused() {
-        assertThat(ask("team-a", "device=xc7k325t", Map.of("priority", 0)).status())
-                .isEqualTo(422);
+        Http.Answer response = ask("team-a", "device=xc7k325t", Map.of("priority", 0));
+        assertThat(response.status()).isEqualTo(422);
+        assertThat(response.json()
+                        .get("error")
+                        .get("details")
+                        .get("problems")
+                        .get(0)
+                        .get("where")
+                        .asText())
+                .isEqualTo("priority");
     }
 
     @Test

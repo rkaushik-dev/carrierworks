@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.carrierworks.api;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import io.github.rkaushikdev.carrierworks.BenchError;
 import io.github.rkaushikdev.carrierworks.ConfigurationError;
 import io.github.rkaushikdev.carrierworks.Conflict;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +28,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -51,6 +54,8 @@ public class Errors {
 
     /** What a request is told about a field or parameter it left out that has no default. */
     public static final String REQUIRED = "a value is required";
+
+    private static final PropertyNamingStrategies.NamingBase WIRE = new PropertyNamingStrategies.SnakeCaseStrategy();
 
     // How long to tell a caller to wait, by what went wrong out in the lab.
     private static final Map<String, Integer> RETRY_SECONDS = Map.of("power", 30, "chain", 5, "transient", 10);
@@ -127,13 +132,11 @@ public class Errors {
             case MethodArgumentNotValidException invalid ->
                 invalid.getBindingResult()
                         .getFieldErrors()
-                        .forEach(field -> problems.add(problem(field.getField(), field.getDefaultMessage())));
+                        .forEach(field -> problems.add(problem(wire(field.getField()), field.getDefaultMessage())));
             case HandlerMethodValidationException invalid ->
                 invalid.getParameterValidationResults().forEach(result -> result.getResolvableErrors()
-                        .forEach(error -> problems.add(problem(
-                                Optional.ofNullable(result.getMethodParameter().getParameterName())
-                                        .orElse("parameter"),
-                                error.getDefaultMessage()))));
+                        .forEach(error -> problems.add(
+                                problem(parameterName(result.getMethodParameter()), error.getDefaultMessage()))));
             case MissingServletRequestParameterException missing ->
                 problems.add(problem(missing.getParameterName(), REQUIRED));
             case MethodArgumentTypeMismatchException mismatch ->
@@ -141,6 +144,20 @@ public class Errors {
             default -> problems.add(problem("body", firstLine(failure.getMessage())));
         }
         return problems;
+    }
+
+    /** A field the way the wire spells it, which is snake case, however the record names it. */
+    private static String wire(String path) {
+        return WIRE.translate(path);
+    }
+
+    /** A parameter by the name a request gives it, rather than the name the handler does. */
+    private static String parameterName(MethodParameter parameter) {
+        RequestParam query = parameter.getParameterAnnotation(RequestParam.class);
+        if (query != null && !query.name().isEmpty()) {
+            return query.name();
+        }
+        return wire(Optional.ofNullable(parameter.getParameterName()).orElse("parameter"));
     }
 
     private static Map<String, String> problem(String where, String why) {

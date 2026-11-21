@@ -97,7 +97,16 @@ class ApiStatusTest {
 
     @Test
     void aSillyWindowIsRefused() {
-        assertThat(client.get("/status?expiring_within=0").status()).isEqualTo(422);
+        Http.Answer response = client.get("/status?expiring_within=0");
+        assertThat(response.status()).isEqualTo(422);
+        assertThat(response.json()
+                        .get("error")
+                        .get("details")
+                        .get("problems")
+                        .get(0)
+                        .get("where")
+                        .asText())
+                .isEqualTo("expiring_within");
     }
 
     @Test
