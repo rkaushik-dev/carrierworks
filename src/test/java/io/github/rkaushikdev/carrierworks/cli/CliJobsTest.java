@@ -87,6 +87,14 @@ class CliJobsTest {
     }
 
     @Test
+    void aModeIsTakenOnlyAsItIsSpelled() {
+        Shell.Result result = submit(digest(), "JTAG");
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.output()).contains("Error: no such programming mode").contains("'JTAG'");
+        assertThat(shell.run("--json", "job", "list").json()).isEmpty();
+    }
+
+    @Test
     void aJobForAnImageNobodyHasIsAnError() {
         Shell.Result result = submit("ab".repeat(32));
         assertThat(result.exitCode()).isNotZero();

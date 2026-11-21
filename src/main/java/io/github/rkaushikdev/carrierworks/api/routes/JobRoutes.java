@@ -78,7 +78,7 @@ public class JobRoutes {
     @Requires(Role.OPERATOR)
     public JobOut submitJob(@Valid @RequestBody JobIn asked) {
         Instant moment = Times.now(clock);
-        JobMode mode = JobMode.parse(asked.mode());
+        JobMode mode = JobMode.exactly(asked.mode());
         return work.apply(unit -> JobOut.of(Programming.submit(
                 unit, asked.board(), asked.digest(), mode, asked.requestedBy(), moment, asked.verify())));
     }

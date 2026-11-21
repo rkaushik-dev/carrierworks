@@ -49,6 +49,20 @@ public enum JobMode {
                 .orElseThrow(() -> new ValidationError("no such programming mode", "mode", Details.of("given", name)));
     }
 
+    /**
+     * The mode with exactly this name, which is how a submission names one.
+     *
+     * <p>A job submitted from the command line or over HTTP has to say {@code jtag},
+     * {@code flash-update} or {@code flash-golden} as written; {@code JTAG} or {@code flash_update}
+     * is refused rather than guessed at, because the mode decides which flash region gets written.
+     */
+    public static JobMode exactly(String text) {
+        return Arrays.stream(values())
+                .filter(mode -> mode.value.equals(text))
+                .findFirst()
+                .orElseThrow(() -> new ValidationError("no such programming mode", "mode", Details.of("given", text)));
+    }
+
     @Override
     public String toString() {
         return value;

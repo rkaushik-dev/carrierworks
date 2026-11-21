@@ -55,8 +55,8 @@ final class JobCommands {
 
         @Override
         int run(Context context) {
-            ProgramJob job = context.apply(unit ->
-                    Programming.submit(unit, tag, digest, JobMode.parse(mode), requestedBy, context.now(), !noVerify));
+            ProgramJob job = context.apply(unit -> Programming.submit(
+                    unit, tag, digest, JobMode.exactly(mode), requestedBy, context.now(), !noVerify));
             context.say(
                     job.id() + " queued: " + job.mode().value() + " " + job.shortDigest() + " on " + job.board(),
                     fields(

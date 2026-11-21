@@ -68,6 +68,14 @@ class ApiJobsTest {
     }
 
     @Test
+    void aModeIsTakenOnlyAsItIsSpelled() {
+        Http.Answer response = submit("bx-14", DIGEST, "Flash_Update");
+        assertThat(response.status()).isEqualTo(422);
+        assertThat(response.json().at("/error/message").asText()).isEqualTo("no such programming mode");
+        assertThat(response.json().at("/error/details/given").asText()).isEqualTo("Flash_Update");
+    }
+
+    @Test
     void aJobGoesOnTheQueue() {
         Http.Answer response = submit();
         assertThat(response.status()).isEqualTo(201);
