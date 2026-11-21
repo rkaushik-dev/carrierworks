@@ -38,7 +38,7 @@ import picocli.CommandLine.ParseResult;
 @Command(
         name = "fpga",
         description = "The bench: boards, leases, images and jobs.",
-        subcommands = {BoardCommands.class, Main.Version.class})
+        subcommands = {AuditCommand.class, BoardCommands.class, LeaseCommands.class, Main.Version.class})
 public final class Main {
 
     /** The exit status of a command that did what it was asked. */
