@@ -47,6 +47,9 @@ import picocli.CommandLine.ParseResult;
             JobCommands.class,
             LeaseCommands.class,
             PowerCommands.class,
+            QueueCommands.class,
+            ThermalCommands.class,
+            UpkeepCommands.class,
             Main.Version.class
         })
 public final class Main {
