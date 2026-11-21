@@ -50,6 +50,15 @@ public final class Http {
                 .content(write(body)));
     }
 
+    /** A post whose body is raw bytes of the type given. */
+    public Answer postBytes(String path, byte[] body, MediaType type) {
+        return send(MockMvcRequestBuilders.post(path).contentType(type).content(body));
+    }
+
+    public Answer put(String path) {
+        return send(MockMvcRequestBuilders.put(path));
+    }
+
     public Answer putJson(String path, Object body) {
         return send(MockMvcRequestBuilders.put(path)
                 .contentType(MediaType.APPLICATION_JSON)
