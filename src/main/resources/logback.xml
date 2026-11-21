@@ -9,6 +9,8 @@
     </appender>
     <!-- A refused write is reported by the bench as a conflict; the driver's own line is noise. -->
     <logger name="org.hibernate.engine.jdbc.spi.SqlExceptionHelper" level="OFF"/>
+    <!-- A database with no schema is reported by the bench as one sentence; this line would repeat it. -->
+    <logger name="org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean" level="OFF"/>
     <root level="WARN">
         <appender-ref ref="console"/>
     </root>
