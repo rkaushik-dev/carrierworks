@@ -49,6 +49,9 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @RestControllerAdvice
 public class Errors {
 
+    /** What a request is told about a field or parameter it left out that has no default. */
+    static final String REQUIRED = "a value is required";
+
     // How long to tell a caller to wait, by what went wrong out in the lab.
     private static final Map<String, Integer> RETRY_SECONDS = Map.of("power", 30, "chain", 5, "transient", 10);
     private static final int DEFAULT_RETRY = 10;
@@ -132,7 +135,7 @@ public class Errors {
                                         .orElse("parameter"),
                                 error.getDefaultMessage()))));
             case MissingServletRequestParameterException missing ->
-                problems.add(problem(missing.getParameterName(), "a value is required"));
+                problems.add(problem(missing.getParameterName(), REQUIRED));
             case MethodArgumentTypeMismatchException mismatch ->
                 problems.add(problem(mismatch.getName(), "that is not a usable value"));
             default -> problems.add(problem("body", firstLine(failure.getMessage())));
