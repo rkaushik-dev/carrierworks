@@ -1,23 +1,13 @@
-# Java
+# Build output
 target/
 build/
 .gradle/
+out/
+
+# IDE files
 .idea/
 *.iml
-out/
+
+# Local H2 databases
 *.mv.db
 *.trace.db
-
-# Python, until the original sources are removed
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-dist/
-*.egg-info/
-.venv/
-*.db
-*.sqlite3
