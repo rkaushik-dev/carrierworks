@@ -3,9 +3,12 @@ package io.github.rkaushikdev.carrierworks.cli;
 import io.github.rkaushikdev.carrierworks.BenchError;
 import io.github.rkaushikdev.carrierworks.BenchSettings;
 import io.github.rkaushikdev.carrierworks.Carrierworks;
+import io.github.rkaushikdev.carrierworks.util.Repr;
 import java.io.PrintWriter;
+import java.math.BigInteger;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Help;
@@ -14,6 +17,7 @@ import picocli.CommandLine.Model.OptionSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.ParseResult;
+import picocli.CommandLine.TypeConversionException;
 
 /**
  * The {@code fpga} command line, which is how the lab actually uses the bench.
@@ -66,6 +70,8 @@ public final class Main {
     /** The exit status of a command line that cannot be run as typed. */
     public static final int USAGE = 2;
 
+    private static final Pattern WHOLE_NUMBER = Pattern.compile("[+-]?[0-9](?:_?[0-9])*");
+
     @Option(names = "--json", description = "print machine readable output")
     private boolean asJson;
 
@@ -103,8 +109,26 @@ public final class Main {
         CommandLine line = new CommandLine(main);
         line.setExpandAtFiles(false);
         line.setOverwrittenOptionsAllowed(true);
+        line.registerConverter(Integer.class, Main::wholeNumber);
+        line.registerConverter(Integer.TYPE, Main::wholeNumber);
         prepare(line);
         return line;
+    }
+
+    /**
+     * A whole number the way an operator types one: an optional sign and decimal digits, with spaces
+     * around it and single underscores between digits allowed, so {@code " 90 "} and {@code 1_000}
+     * both read.
+     */
+    static int wholeNumber(String text) {
+        String bare = text.strip();
+        if (WHOLE_NUMBER.matcher(bare).matches()) {
+            BigInteger value = new BigInteger(bare.replace("_", ""));
+            if (value.bitLength() < Integer.SIZE) {
+                return value.intValue();
+            }
+        }
+        throw new TypeConversionException(Repr.of(text) + " is not a valid integer.");
     }
 
     /**

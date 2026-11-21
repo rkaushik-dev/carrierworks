@@ -158,6 +158,16 @@ class CliLeasesTest {
     }
 
     @Test
+    void aWholeNumberMayCarrySpacesAndUnderscores() {
+        take("--board", "bx-14", "--minutes", "30");
+        Shell.Result spaced = shell.run("--json", "lease", "renew", "lease-00001", "--minutes", " 1_20 ");
+        assertThat(spaced.exitCode()).isZero();
+        Shell.Result mistyped = shell.run("lease", "renew", "lease-00001", "--minutes", "1__20");
+        assertThat(mistyped.exitCode()).isEqualTo(2);
+        assertThat(mistyped.output()).contains("'1__20' is not a valid integer.");
+    }
+
+    @Test
     void aKeptLeaseIsNotPreemptible() {
         take("--board", "bx-14", "--keep");
         Lease lease;
