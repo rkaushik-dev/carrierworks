@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactKind;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactRecord;
+import io.github.rkaushikdev.carrierworks.bitstream.ConfigOptions;
+import io.github.rkaushikdev.carrierworks.bitstream.SpiRead;
 import io.github.rkaushikdev.carrierworks.flash.FlashLayout;
 import io.github.rkaushikdev.carrierworks.flash.FlashPlan;
 import io.github.rkaushikdev.carrierworks.flash.WearLedger;
@@ -19,6 +21,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -262,6 +265,62 @@ class GatesTest {
                         BoardSetup.kintex("bx-14").noCable().build())
                 .report();
         assertThat(report.blockers()).contains("no cable is on that board");
+    }
+
+    private static Board oneBitFlash() {
+        return BoardSetup.kintex("bx-14").flash("m25p128").build();
+    }
+
+    private static ConfigOptions reading(SpiRead read) {
+        return new ConfigOptions(Optional.of(read), false, false, OptionalLong.empty());
+    }
+
+    @Test
+    void aQuadReadImageCannotGoOnAFlashWiredOneBitWide() {
+        GateReport report = check(job(JobMode.FLASH_UPDATE), oneBitFlash())
+                .options(reading(SpiRead.QUAD_READ))
+                .report();
+        assertThat(report.blockers())
+                .containsExactly("the image reads its flash four bits wide and the m25p128 on this board cannot");
+    }
+
+    @Test
+    void aQuadReadImageGoesOnAQuadPart() {
+        assertThat(check(job(JobMode.FLASH_UPDATE))
+                        .options(reading(SpiRead.QUAD_READ_4B))
+                        .report()
+                        .allowed())
+                .isTrue();
+    }
+
+    @Test
+    void aOneOrTwoBitReadGoesOnAnyPart() {
+        for (SpiRead read : new SpiRead[] {SpiRead.FAST_READ, SpiRead.DUAL_READ, SpiRead.READ_4B}) {
+            assertThat(check(job(JobMode.FLASH_UPDATE), oneBitFlash())
+                            .options(reading(read))
+                            .report()
+                            .allowed())
+                    .as(read.name())
+                    .isTrue();
+        }
+    }
+
+    @Test
+    void theReadWidthDoesNotMatterForAJtagLoad() {
+        assertThat(check(job(), oneBitFlash())
+                        .options(reading(SpiRead.QUAD_READ))
+                        .report()
+                        .allowed())
+                .isTrue();
+    }
+
+    @Test
+    void anImageThatNeverNamesARead() {
+        assertThat(check(job(JobMode.FLASH_UPDATE), oneBitFlash())
+                        .options(ConfigOptions.DEFAULTS)
+                        .report()
+                        .allowed())
+                .isTrue();
     }
 
     @Test

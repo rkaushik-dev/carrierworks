@@ -271,6 +271,28 @@ class RunnerTest {
     }
 
     @Test
+    void theGatesReadTheStoredImageForItsFlashRead() {
+        Bench bench = bench();
+        bench.book.add(BoardSetup.kintex("bx-16")
+                .flash("m25p128")
+                .location("rack-2/shelf-04/slot-4")
+                .serial("210308AB9999")
+                .outlet(8)
+                .build());
+        bench.leases.acquire("bx-16", "team-a", "capture", NOW);
+        bench.book.moveTo("bx-16", BoardStatus.LEASED, NOW, "", "team-a");
+        Bitstream quad = Bitstream.read(Images.image().frames(64).spiRead(0x6B).bitfile());
+        ArtifactRecord stored = bench.store.put(quad, "qual");
+        ProgramJob job = ProgramJob.builder("job-00002", "bx-16", stored.digest(), JobMode.FLASH_UPDATE, "team-a", NOW)
+                .build();
+        RunResult result = bench.runner.run(job, NOW, bench.drivers(), Optional.of(true));
+        assertThat(result.passed()).isFalse();
+        assertThat(result.detail())
+                .isEqualTo("the image reads its flash four bits wide and the m25p128 on this board cannot");
+        assertThat(bench.book.state("bx-16").state()).isEqualTo(BoardStatus.LEASED);
+    }
+
+    @Test
     void aJobForAnImageNobodyStoredIsANotFound() {
         Bench bench = bench();
         ProgramJob unknown = bench.job(JobMode.JTAG, "ab".repeat(32));

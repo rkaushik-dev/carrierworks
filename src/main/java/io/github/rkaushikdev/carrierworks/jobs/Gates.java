@@ -2,7 +2,10 @@ package io.github.rkaushikdev.carrierworks.jobs;
 
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactRecord;
 import io.github.rkaushikdev.carrierworks.artifacts.Channel;
+import io.github.rkaushikdev.carrierworks.bitstream.ConfigOptions;
+import io.github.rkaushikdev.carrierworks.bitstream.SpiRead;
 import io.github.rkaushikdev.carrierworks.catalog.DeviceSpec;
+import io.github.rkaushikdev.carrierworks.catalog.FlashSpec;
 import io.github.rkaushikdev.carrierworks.flash.WearLedger;
 import io.github.rkaushikdev.carrierworks.inventory.Board;
 import io.github.rkaushikdev.carrierworks.inventory.BoardState;
@@ -35,6 +38,8 @@ import java.util.stream.Collectors;
  *       indistinguishable, from their side, from the board failing.
  *   <li>A worn flash does not get the golden image. If the part is near the end of its erase life,
  *       the copy that has to survive is not the one to write to it.
+ *   <li>An image has to be able to read itself back out of the part it is written to. One built for
+ *       a quad read boots from nothing on a part that is not wired for four bit transfers.
  * </ul>
  *
  * <p>The blockers are sentences operators read, and {@link GateReport#describe()} puts them in one
@@ -74,6 +79,7 @@ public final class Gates {
         private Optional<Boolean> timingClosed = Optional.empty();
         private boolean requireTiming = true;
         private Optional<WearLedger> wear = Optional.empty();
+        private ConfigOptions options = ConfigOptions.DEFAULTS;
 
         private Check(ProgramJob job, Board board, ArtifactRecord record, BoardState state) {
             this.job = Objects.requireNonNull(job, "job");
@@ -121,6 +127,12 @@ public final class Gates {
             return this;
         }
 
+        /** What the image sets on the device, which is the defaults unless the check is told. */
+        public Check options(ConfigOptions value) {
+            options = Objects.requireNonNull(value, "options");
+            return this;
+        }
+
         /** Run every check and report all of them at once. */
         public GateReport report() {
             List<String> blockers = new ArrayList<>();
@@ -132,24 +144,8 @@ public final class Gates {
                 blockers.add("a " + job.mode().value() + " write takes " + channels + " images and this one is in "
                         + record.channel());
             }
-            if (requireTiming && job.writesFlash()) {
-                if (timingClosed.isEmpty()) {
-                    blockers.add("no timing report has been read for this image");
-                } else if (!timingClosed.get()) {
-                    blockers.add("the design did not close timing");
-                }
-            }
-            if (job.touchesGolden() && wear.isPresent() && wear.get().isWorn(board.tag(), board.flashSpec())) {
-                blockers.add("the flash on this board is near the end of its erase life");
-            }
-            Optional<AdapterUnit> adapter = board.adapter();
-            if (job.writesFlash()
-                    && adapter.isPresent()
-                    && !adapter.get().spec().canProgramFlash()) {
-                blockers.add("the " + adapter.get().model() + " on this board cannot write flash");
-            }
-            if (job.writesFlash() && adapter.isEmpty()) {
-                blockers.add("no cable is on that board");
+            if (job.writesFlash()) {
+                blockers.addAll(flashBlockers());
             }
             return new GateReport(job.id(), blockers);
         }
@@ -160,14 +156,40 @@ public final class Gates {
             if (!record.device().equals(fitted.device())) {
                 blockers.add("the image is for " + record.device() + " and the board carries " + fitted.device());
             }
-            if (record.isPartial() && job.writesFlash()) {
-                blockers.add("a partial image cannot be written to flash");
-            }
-            if (job.writesFlash() && record.length() > board.flashSpec().capacityBytes()) {
-                blockers.add("the image is bigger than the flash on this board");
-            }
             if (!job.writesFlash() && record.length() > fitted.configBytes()) {
                 blockers.add("the image is longer than this device's configuration");
+            }
+            return blockers;
+        }
+
+        /** What stands between this image and the configuration flash on this board. */
+        private List<String> flashBlockers() {
+            List<String> blockers = new ArrayList<>();
+            FlashSpec flash = board.flashSpec();
+            if (record.isPartial()) {
+                blockers.add("a partial image cannot be written to flash");
+            }
+            if (record.length() > flash.capacityBytes()) {
+                blockers.add("the image is bigger than the flash on this board");
+            }
+            if (requireTiming && timingClosed.isEmpty()) {
+                blockers.add("no timing report has been read for this image");
+            } else if (requireTiming && !timingClosed.get()) {
+                blockers.add("the design did not close timing");
+            }
+            if (job.touchesGolden() && wear.isPresent() && wear.get().isWorn(board.tag(), flash)) {
+                blockers.add("the flash on this board is near the end of its erase life");
+            }
+            Optional<SpiRead> read = options.spiRead();
+            if (read.isPresent() && read.get().needsQuad() && !flash.quadCapable()) {
+                blockers.add(
+                        "the image reads its flash four bits wide and the " + flash.name() + " on this board cannot");
+            }
+            Optional<AdapterUnit> adapter = board.adapter();
+            if (adapter.isEmpty()) {
+                blockers.add("no cable is on that board");
+            } else if (!adapter.get().spec().canProgramFlash()) {
+                blockers.add("the " + adapter.get().model() + " on this board cannot write flash");
             }
             return blockers;
         }

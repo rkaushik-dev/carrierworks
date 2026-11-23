@@ -17,7 +17,11 @@ public final class FlashParts {
             new FlashSpec("mx25l25635f", "macronix", 0xC22019, 32 * MIB, 256, 4096, 65536, 750, 250, 900, 300),
             new FlashSpec("s25fl128s", "spansion", 0x012018, 16 * MIB, 256, 4096, 65536, 600, 290, 520, 165),
             new FlashSpec(
-                    "w25q64jv", "winbond", 0xEF4017, 8 * MIB, 256, 4096, 65536, 700, 120, 1000, 100, true, 100_000));
+                    "w25q64jv", "winbond", 0xEF4017, 8 * MIB, 256, 4096, 65536, 700, 120, 1000, 100, true, 100_000),
+            // The older carriers' part: one bit wide only, and nothing smaller than a sector to erase.
+            new FlashSpec(
+                    "m25p128", "micron", 0x202018, 16 * MIB, 256, 262144, 262144, 800, 2000, 2000, 105, false,
+                    100_000));
 
     /** Every part the lab stocks, by name and by JEDEC id. */
     public static final CatalogIndex<FlashSpec> FLASH_PARTS =

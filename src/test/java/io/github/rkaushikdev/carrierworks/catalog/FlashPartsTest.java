@@ -119,6 +119,16 @@ class FlashPartsTest {
     }
 
     @Test
+    void theOlderCarriersPartIsOneBitWideAndErasesOnlyWholeSectors() {
+        FlashSpec part = FlashParts.part("m25p128");
+        assertThat(part.quadCapable()).isFalse();
+        assertThat(part.subsectorBytes()).isEqualTo(part.sectorBytes());
+        assertThat(part.subsectorsPerSector()).isEqualTo(1);
+        assertThat(part.sectorCount()).isEqualTo(64);
+        assertThat(FlashParts.forJedecId(0x202018)).isSameAs(part);
+    }
+
+    @Test
     void jedecIdsAreUnique() {
         List<Integer> ids = FlashParts.all().stream().map(FlashSpec::jedecId).toList();
         assertThat(new HashSet<>(ids)).hasSameSizeAs(ids);
