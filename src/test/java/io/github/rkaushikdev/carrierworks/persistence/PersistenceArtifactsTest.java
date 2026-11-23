@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.rkaushikdev.carrierworks.reports.BuildReport;
 import io.github.rkaushikdev.carrierworks.reports.PulseWidth;
+import io.github.rkaushikdev.carrierworks.reports.SiteKind;
 import io.github.rkaushikdev.carrierworks.reports.SiteUsage;
 import io.github.rkaushikdev.carrierworks.reports.TimingSummary;
 import io.github.rkaushikdev.carrierworks.reports.Utilization;
@@ -205,6 +206,65 @@ class PersistenceArtifactsTest {
             assertThat(found.closed()).isFalse();
             assertThat(found.timing().failingEndpoints()).isEqualTo(2);
         });
+    }
+
+    @Test
+    void aStoredReportIsMeasuredAgainstTheDeviceItWasBuiltFor() {
+        engine.sessionScope(session -> {
+            ArtifactRow row = artifact();
+            row.addReport(report());
+            session.persist(row);
+        });
+        engine.sessionScope(session -> {
+            BuildReport found =
+                    new BuildReportRepository(session).forDigest(DIGEST).orElseThrow();
+            SiteUsage luts = found.utilization().row(SiteKind.LUTS).orElseThrow();
+            assertThat(luts.used()).isEqualTo(45_000);
+            assertThat(luts.available()).isEqualTo(203_800);
+            assertThat(luts.percent()).isLessThan(25.0);
+            assertThat(found.utilization().row(SiteKind.REGISTERS).orElseThrow().available())
+                    .isEqualTo(407_600);
+        });
+    }
+
+    @Test
+    void storedReportsThatGrewAreCaughtAsRegressions() {
+        String other = "cd".repeat(32);
+        engine.sessionScope(session -> {
+            ArtifactRow first = artifact();
+            first.addReport(report());
+            session.persist(first);
+            ArtifactRow second = artifact(other, "dev", 3_000_000);
+            BuildReportRow grown = report(other, 400);
+            grown.setLuts(90_000);
+            second.addReport(grown);
+            session.persist(second);
+        });
+        engine.sessionScope(session -> {
+            BuildReportRepository reports = new BuildReportRepository(session);
+            List<String> found = BuildReport.compare(
+                    reports.forDigest(DIGEST).orElseThrow(),
+                    reports.forDigest(other).orElseThrow());
+            assertThat(found).containsExactly("Slice LUTs went from 22.1% to 44.2%");
+        });
+    }
+
+    @Test
+    void anImageForADeviceNobodyStocksKeepsItsCountsAsItsCapacity() {
+        engine.sessionScope(session -> {
+            ArtifactRow row = artifact();
+            row.setDevice("xc7v585t");
+            row.addReport(report());
+            session.persist(row);
+        });
+        engine.sessionScope(session -> assertThat(new BuildReportRepository(session)
+                        .forDigest(DIGEST)
+                        .orElseThrow()
+                        .utilization()
+                        .row(SiteKind.LUTS)
+                        .orElseThrow()
+                        .available())
+                .isEqualTo(45_000));
     }
 
     @Test

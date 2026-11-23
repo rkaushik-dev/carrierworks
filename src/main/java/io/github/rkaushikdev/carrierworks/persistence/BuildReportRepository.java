@@ -1,6 +1,8 @@
 package io.github.rkaushikdev.carrierworks.persistence;
 
 import io.github.rkaushikdev.carrierworks.NotFound;
+import io.github.rkaushikdev.carrierworks.catalog.DeviceSpec;
+import io.github.rkaushikdev.carrierworks.catalog.Devices;
 import io.github.rkaushikdev.carrierworks.reports.BuildReport;
 import io.github.rkaushikdev.carrierworks.reports.PulseWidth;
 import io.github.rkaushikdev.carrierworks.reports.SiteUsage;
@@ -56,7 +58,7 @@ public final class BuildReportRepository {
 
     /** The report for one image, if one was read. */
     public Optional<BuildReport> forDigest(String digest) {
-        return row(digest).map(BuildReportRepository::report);
+        return row(digest).map(this::report);
     }
 
     /** Every report for one design, oldest first. */
@@ -68,7 +70,7 @@ public final class BuildReportRepository {
                 .setParameter("design", design.strip().toLowerCase(Locale.ROOT))
                 .getResultList()
                 .stream()
-                .map(BuildReportRepository::report)
+                .map(this::report)
                 .toList();
     }
 
@@ -81,7 +83,7 @@ public final class BuildReportRepository {
                 .setMaxResults(1)
                 .getResultStream()
                 .findFirst()
-                .map(BuildReportRepository::report);
+                .map(this::report);
     }
 
     /**
@@ -110,11 +112,13 @@ public final class BuildReportRepository {
     /**
      * A report back out of its row, with the utilization rows rebuilt.
      *
-     * <p>Only the four counts the bench compares on are stored, so the available column is not
-     * kept and the rebuilt rows carry the used count as their own capacity. Percentages off a
-     * rebuilt report are therefore meaningless, which is why the comparison reads the counts.
+     * <p>Only the four counts the bench compares on are stored, not the available column, so the
+     * rebuilt rows take their capacity from the device the image was built for. Rebuilding them with
+     * the used count as the capacity read every stored row as a hundred percent full, and a design
+     * that grew by a third compared clean against its baseline. An image for a device the catalogue
+     * does not know keeps that old shape, since there is nothing better to measure it against.
      */
-    private static BuildReport report(BuildReportRow row) {
+    private BuildReport report(BuildReportRow row) {
         TimingSummary timing = new TimingSummary(
                 row.getWnsPs(),
                 row.getTnsPs(),
@@ -127,13 +131,19 @@ public final class BuildReportRepository {
                 row.getDesign(),
                 List.of(),
                 new PulseWidth(row.getWpwsPs(), row.getTpwsPs(), row.getPulseFailing(), row.getPulseTotal()));
+        Optional<DeviceSpec> device = Optional.ofNullable(session.find(ArtifactRow.class, row.getDigest()))
+                .flatMap(artifact -> Devices.lookup(artifact.getDevice()));
         Utilization utilization = new Utilization(
                 List.of(
-                        new SiteUsage("Slice LUTs", row.getLuts(), Math.max(row.getLuts(), 1)),
-                        new SiteUsage("Slice Registers", row.getRegisters(), Math.max(row.getRegisters(), 1)),
-                        new SiteUsage("Block RAM Tile", row.getBlockRam(), Math.max(row.getBlockRam(), 1)),
-                        new SiteUsage("DSPs", row.getDsp(), Math.max(row.getDsp(), 1))),
+                        rebuilt("Slice LUTs", row.getLuts(), device.map(DeviceSpec::luts)),
+                        rebuilt("Slice Registers", row.getRegisters(), device.map(DeviceSpec::flipFlops)),
+                        rebuilt("Block RAM Tile", row.getBlockRam(), device.map(DeviceSpec::blockRam36k)),
+                        rebuilt("DSPs", row.getDsp(), device.map(DeviceSpec::dspSlices))),
                 row.getDesign());
         return new BuildReport(row.getDigest(), row.getDesign(), row.getReadAt(), timing, utilization);
+    }
+
+    private static SiteUsage rebuilt(String name, int used, Optional<Integer> capacity) {
+        return new SiteUsage(name, used, Math.max(capacity.orElse(used), Math.max(used, 1)));
     }
 }
