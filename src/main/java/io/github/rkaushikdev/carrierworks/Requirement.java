@@ -2,6 +2,7 @@ package io.github.rkaushikdev.carrierworks;
 
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -12,7 +13,8 @@ import java.util.regex.Pattern;
  * to write the same thing: a command line, a file in a regression repo, and a text column in the
  * database. The grammar is small on purpose. A bare token asks for a capability, a token with a
  * bang in front asks for its absence, a comparison asks about a number, and an equals asks about an
- * attribute.
+ * attribute. A comparison on {@code speed} is the one exception: it compares speed grades, so
+ * {@code speed>=2} takes a -2 or a -3 and refuses a -2L, which is slower.
  *
  * <p>The explanations matter as much as the answers. A scheduler that says no without saying why
  * sends people to look at the rack, and the walk to the rack is five minutes each way.
@@ -34,12 +36,19 @@ public record Requirement(String text, Kind kind, String key, String op, String 
         /** A count compares a certain way to a number. */
         NUMBER,
         /** A named fact equals, or does not equal, a value. */
-        ATTRIBUTE
+        ATTRIBUTE,
+        /** The fitted part's speed grade compares a certain way to a grade, low power bins included. */
+        SPEED
     }
 
     private static final Pattern COMPARISON =
             Pattern.compile("(?<key>[a-z][a-z0-9_-]*)\\s*(?<op>>=|<=|!=|=|>|<)\\s*(?<value>\\S+)");
     private static final Pattern WHOLE = Pattern.compile("-?\\d+");
+    private static final Pattern GRADE = Pattern.compile("-?(?<digit>\\d)(?<low>l?)");
+    private static final Set<String> ORDERING = Set.of(">=", "<=", ">", "<");
+
+    /** The count a board's profile carries its speed grade under, faster parts higher. */
+    public static final String SPEED_RANK = "speed-rank";
 
     /** Read one requirement as somebody wrote it. */
     public static Requirement parse(String text) {
@@ -57,14 +66,34 @@ public record Requirement(String text, Kind kind, String key, String op, String 
         String key = Ids.slug(match.group("key"));
         String op = match.group("op");
         String raw = match.group("value");
-        if (op.equals(">=") || op.equals("<=") || op.equals(">") || op.equals("<")) {
-            if (!WHOLE.matcher(raw).matches()) {
-                throw new ValidationError(
-                        "a comparison needs a whole number", "requirement", Details.of("given", text));
-            }
-            return new Requirement(cleaned, Kind.NUMBER, key, op, raw);
+        if (key.equals("speed") && ORDERING.contains(op)) {
+            gradeRank(raw)
+                    .orElseThrow(() -> new ValidationError(
+                            "a speed comparison needs a grade such as 2 or 1l",
+                            "requirement",
+                            Details.of("given", text)));
+            return new Requirement(cleaned, Kind.SPEED, key, op, raw.replace("-", ""));
         }
-        return new Requirement(cleaned, Kind.ATTRIBUTE, key, op, raw);
+        if (!ORDERING.contains(op)) {
+            return new Requirement(cleaned, Kind.ATTRIBUTE, key, op, raw);
+        }
+        if (!WHOLE.matcher(raw).matches()) {
+            throw new ValidationError("a comparison needs a whole number", "requirement", Details.of("given", text));
+        }
+        return new Requirement(cleaned, Kind.NUMBER, key, op, raw);
+    }
+
+    /**
+     * Where a speed grade sits, faster higher: a plain grade above its low power bin, and the low
+     * power bin above the plain grade below it, so {@code 2} beats {@code 2l} beats {@code 1}.
+     */
+    public static Optional<Integer> gradeRank(String grade) {
+        Matcher match = GRADE.matcher(grade.strip().toLowerCase(Locale.ROOT));
+        if (!match.matches()) {
+            return Optional.empty();
+        }
+        int digit = Integer.parseInt(match.group("digit"));
+        return Optional.of(digit * 2 - (match.group("low").isEmpty() ? 0 : 1));
     }
 
     /** Whether a board with this profile meets the requirement. */
@@ -87,6 +116,11 @@ public record Requirement(String text, Kind kind, String key, String op, String 
                         ? Optional.empty()
                         : Optional.of(key + " is " + have + ", wanted " + op + want);
             }
+            case SPEED ->
+                compare(profile.number(SPEED_RANK), gradeRank(value).orElseThrow())
+                        ? Optional.empty()
+                        : Optional.of("speed is -" + profile.attribute("speed").orElse("unknown") + ", wanted " + op
+                                + "-" + value);
             case ATTRIBUTE -> attribute(profile.attribute(key));
         };
     }

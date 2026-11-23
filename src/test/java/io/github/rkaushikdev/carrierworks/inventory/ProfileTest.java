@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.rkaushikdev.carrierworks.CapabilityProfile;
 import io.github.rkaushikdev.carrierworks.PduChannel;
+import io.github.rkaushikdev.carrierworks.Requirement;
 import io.github.rkaushikdev.carrierworks.RequirementSet;
 import io.github.rkaushikdev.carrierworks.jtag.AdapterUnit;
 import java.util.List;
@@ -28,6 +29,16 @@ class ProfileTest {
 
     private static RequirementSet wanted(String... requirements) {
         return RequirementSet.parse(List.of(requirements));
+    }
+
+    @Test
+    void theSpeedGradeIsACountToo() {
+        CapabilityProfile profile = BoardProfile.of(BoardSetup.kintex());
+        assertThat(profile.number(Requirement.SPEED_RANK)).isEqualTo(4);
+        assertThat(BoardProfile.matches(BoardSetup.kintex(), RequirementSet.parse("speed>=2")))
+                .isTrue();
+        assertThat(BoardProfile.whyNot(BoardSetup.kintex(), RequirementSet.parse("speed>=3")))
+                .contains("speed is -2, wanted >=-3");
     }
 
     @Test

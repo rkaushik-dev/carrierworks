@@ -2,6 +2,7 @@ package io.github.rkaushikdev.carrierworks.catalog;
 
 import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.JunctionRange;
+import io.github.rkaushikdev.carrierworks.Requirement;
 import io.github.rkaushikdev.carrierworks.ValidationError;
 import io.github.rkaushikdev.carrierworks.util.Repr;
 import java.util.Locale;
@@ -128,10 +129,9 @@ public record PartNumber(String device, String speedGrade, String packageCode, S
         return TEMPERATURE_RANGES.get(temperature);
     }
 
-    /** Higher is faster. A 2L sits below a plain 2 and above a 1. */
+    /** Higher is faster. A 2L sits below a plain 2 and above a 1, the way a requirement ranks them. */
     public int speedRank() {
-        int digit = speedGrade.charAt(0) - '0';
-        return digit * 2 - (lowPower() ? 1 : 0);
+        return Requirement.gradeRank(speedGrade).orElseThrow();
     }
 
     /** Back to the form printed on the lid. */

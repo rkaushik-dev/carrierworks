@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.carrierworks.inventory;
 
 import io.github.rkaushikdev.carrierworks.CapabilityProfile;
+import io.github.rkaushikdev.carrierworks.Requirement;
 import io.github.rkaushikdev.carrierworks.RequirementSet;
 import io.github.rkaushikdev.carrierworks.catalog.CardSpec;
 import io.github.rkaushikdev.carrierworks.catalog.DeviceSpec;
@@ -67,6 +68,7 @@ public final class BoardProfile {
         numbers.put("flash-mib", Math.toIntExact(flash.capacityBytes() / MIB));
         numbers.put("tck-mhz", board.maxTckHz() / MHZ);
         numbers.put("cards", board.fittedCards().size());
+        numbers.put(Requirement.SPEED_RANK, board.part().speedRank());
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("family", device.family());
         attributes.put("device", device.device());

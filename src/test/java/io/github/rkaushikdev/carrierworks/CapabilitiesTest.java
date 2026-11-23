@@ -101,6 +101,59 @@ class CapabilitiesTest {
         assertThat(Requirement.parse(text).explain(profile())).contains(reason);
     }
 
+    private static CapabilityProfile graded(String grade) {
+        return CapabilityProfile.build(
+                Set.of(),
+                Map.of(Requirement.SPEED_RANK, Requirement.gradeRank(grade).orElseThrow()),
+                Map.of("speed", grade));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "speed>=2, 3, true",
+        "speed>=2, 2, true",
+        "speed>=2, 2l, false",
+        "speed>=2, 1, false",
+        "speed>=2l, 2l, true",
+        "speed>1l, 1, true",
+        "speed<2, 2l, true",
+        "speed<=1, 1l, true",
+        "speed>=-2, 2, true"
+    })
+    void aSpeedComparisonRanksGradesWithTheLowPowerBinsBetween(String text, String grade, boolean met) {
+        Requirement requirement = Requirement.parse(text);
+        assertThat(requirement.kind()).isEqualTo(Requirement.Kind.SPEED);
+        assertThat(requirement.satisfiedBy(graded(grade))).isEqualTo(met);
+    }
+
+    @Test
+    void aSlowerPartSaysWhichGradeItIs() {
+        assertThat(Requirement.parse("speed>=2").explain(graded("1"))).contains("speed is -1, wanted >=-2");
+    }
+
+    @Test
+    void aSpeedEqualityIsStillAnAttribute() {
+        Requirement requirement = Requirement.parse("speed=2l");
+        assertThat(requirement.kind()).isEqualTo(Requirement.Kind.ATTRIBUTE);
+        assertThat(requirement.satisfiedBy(graded("2l"))).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"speed>=fast", "speed>=12", "speed>=2x"})
+    void aSpeedComparisonNeedsAGrade(String text) {
+        assertThatThrownBy(() -> Requirement.parse(text))
+                .isInstanceOf(ValidationError.class)
+                .hasMessageContaining("needs a grade");
+    }
+
+    @Test
+    void gradesRankTheWayThePartNumberDoes() {
+        assertThat(Requirement.gradeRank("3")).hasValue(6);
+        assertThat(Requirement.gradeRank("2L")).hasValue(3);
+        assertThat(Requirement.gradeRank("-1")).hasValue(2);
+        assertThat(Requirement.gradeRank("")).isEmpty();
+    }
+
     @Test
     void aMetRequirementExplainsNothing() {
         assertThat(Requirement.parse("adc-16bit").explain(profile())).isEmpty();
