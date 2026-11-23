@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -134,6 +135,7 @@ class CliImagesTest {
         assertThat(result.output()).contains("loads    0 passed, 0 failed");
         assertThat(result.output()).contains("options  defaults");
         assertThat(result.output()).contains("crc      crc not written");
+        assertThat(result.output()).contains("stamped  not stamped");
     }
 
     @Test
@@ -150,6 +152,19 @@ class CliImagesTest {
         JsonNode body = shell.run("--json", "image", "show", digest).json();
         assertThat(body.get("options").asText()).isEqualTo("x4 read 0x6c, 4 address bytes, watchdog 0x00002000");
         assertThat(body.get("crc").asText()).isEqualTo("crc not written");
+        assertThat(body.get("stamped").asText()).isEmpty();
+    }
+
+    @Test
+    void showingAStampedImageSaysWhenItWasBuilt() throws IOException {
+        Files.write(
+                root.resolve("stamped.bit"),
+                Images.image().stamp(LocalDateTime.of(2026, 3, 2, 23, 41, 7)).bitfile());
+        String digest = shell.run("--json", "image", "upload", file("stamped.bit"))
+                .json()
+                .get("digest")
+                .asText();
+        assertThat(shell.run("image", "show", digest).output()).contains("stamped  2026-03-02 23:41:07");
     }
 
     @Test

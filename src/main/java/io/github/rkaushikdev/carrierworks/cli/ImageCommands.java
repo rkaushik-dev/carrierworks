@@ -11,6 +11,7 @@ import io.github.rkaushikdev.carrierworks.artifacts.PromotionEvidence;
 import io.github.rkaushikdev.carrierworks.artifacts.Provenance;
 import io.github.rkaushikdev.carrierworks.bitstream.Binary;
 import io.github.rkaushikdev.carrierworks.bitstream.Bitstream;
+import io.github.rkaushikdev.carrierworks.bitstream.BuildStamp;
 import io.github.rkaushikdev.carrierworks.bitstream.ConfigOptions;
 import io.github.rkaushikdev.carrierworks.bitstream.Mcs;
 import io.github.rkaushikdev.carrierworks.bitstream.PacketCrc;
@@ -207,6 +208,7 @@ final class ImageCommands {
             byte[] data = store(context).read(record.digest());
             String options = ConfigOptions.of(data).describe();
             String crc = PacketCrc.check(data).describe();
+            String stamped = BuildStamp.of(data).map(BuildStamp::describe).orElse("");
             if (context.asJson()) {
                 context.say(
                         "",
@@ -225,7 +227,8 @@ final class ImageCommands {
                                 "loads_passed", known.loads().passed(),
                                 "loads_failed", known.loads().failed(),
                                 "options", options,
-                                "crc", crc));
+                                "crc", crc,
+                                "stamped", stamped));
                 return OK;
             }
             List<String> builds = known.buildIds();
@@ -241,6 +244,7 @@ final class ImageCommands {
                     known.loads().passed() + " passed, " + known.loads().failed() + " failed");
             rows.put("options", options);
             rows.put("crc", crc);
+            rows.put("stamped", stamped.isEmpty() ? "not stamped" : stamped);
             rows.forEach((label, value) -> context.echo(String.format(Locale.ROOT, "%-8s %s", label, value)));
             return OK;
         }

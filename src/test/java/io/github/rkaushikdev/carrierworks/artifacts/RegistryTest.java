@@ -1,19 +1,13 @@
 package io.github.rkaushikdev.carrierworks.artifacts;
 
-import static io.github.rkaushikdev.carrierworks.bitstream.Packets.SYNC_WORD;
-import static io.github.rkaushikdev.carrierworks.bitstream.Packets.type1;
-import static io.github.rkaushikdev.carrierworks.bitstream.Packets.type2;
-import static io.github.rkaushikdev.carrierworks.bitstream.Packets.wordsToBytes;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.rkaushikdev.carrierworks.NotFound;
 import io.github.rkaushikdev.carrierworks.ValidationError;
-import io.github.rkaushikdev.carrierworks.bitstream.BitFile;
 import io.github.rkaushikdev.carrierworks.bitstream.Bitstream;
+import io.github.rkaushikdev.carrierworks.bitstream.Images;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,6 +16,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 class RegistryTest {
 
     private static final String DIGEST = "ab".repeat(32);
+    private static final long ARTIX = 0x03631093L;
 
     @TempDir
     Path tmp;
@@ -29,37 +24,28 @@ class RegistryTest {
     /** An Artix image of the radar front end, read from a file named for its design. */
     private static final class Sample {
 
+        private Images.Image image =
+                Images.image().part(Images.ARTIX_PART).idcode(ARTIX).frames(8);
         private String design = "radar_frontend";
-        private boolean start = true;
-        private int frames = 8;
 
         Sample design(String value) {
             design = value;
+            image = image.design(value);
             return this;
         }
 
         Sample start(boolean value) {
-            start = value;
+            image = image.start(value);
             return this;
         }
 
         Sample frames(int value) {
-            frames = value;
+            image = image.frames(value);
             return this;
         }
 
         Bitstream read() {
-            List<Long> words = new ArrayList<>(
-                    List.of(0xFFFF_FFFFL, SYNC_WORD, type1(2, 12, 1), 0x03631093L, type1(2, 2, 0), type2(2, frames)));
-            for (long word = 0; word < frames; word++) {
-                words.add(word);
-            }
-            if (start) {
-                words.addAll(List.of(type1(2, 4, 1), 5L));
-            }
-            byte[] bitfile = BitFile.build(
-                    design + ";Version=2024.1", "7a100tfgg484", "2025/05/20", "08:00:00", wordsToBytes(words));
-            return Bitstream.read(bitfile, design + ".bit");
+            return image.bitstream(design + ".bit");
         }
     }
 

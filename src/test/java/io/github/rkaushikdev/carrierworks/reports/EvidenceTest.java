@@ -10,9 +10,8 @@ import io.github.rkaushikdev.carrierworks.artifacts.PromotionEvidence;
 import io.github.rkaushikdev.carrierworks.artifacts.Promotions;
 import io.github.rkaushikdev.carrierworks.artifacts.Provenance;
 import io.github.rkaushikdev.carrierworks.artifacts.ProvenanceLog;
-import io.github.rkaushikdev.carrierworks.bitstream.BitFile;
 import io.github.rkaushikdev.carrierworks.bitstream.Bitstream;
-import io.github.rkaushikdev.carrierworks.bitstream.Packets;
+import io.github.rkaushikdev.carrierworks.bitstream.Images;
 import io.github.rkaushikdev.carrierworks.jobs.JobMode;
 import io.github.rkaushikdev.carrierworks.jobs.JobStore;
 import io.github.rkaushikdev.carrierworks.jobs.ProgramJob;
@@ -71,19 +70,11 @@ class EvidenceTest {
     }
 
     private Logged provenanceLog(boolean dirty) {
-        byte[] words = Packets.wordsToBytes(
-                Packets.SYNC_WORD,
-                Packets.type1(2, 12, 1),
-                0x03631093L,
-                Packets.type1(2, 2, 0),
-                Packets.type2(2, 4),
-                1,
-                2,
-                3,
-                4,
-                Packets.type1(2, 4, 1),
-                5);
-        Bitstream image = Bitstream.read(BitFile.build("radar_frontend", "7a100tfgg484", "d", "t", words));
+        Bitstream image = Images.image()
+                .part(Images.ARTIX_PART)
+                .idcode(0x03631093L)
+                .frames(4)
+                .bitstream();
         ArtifactStore store = new ArtifactStore(tmp.resolve("artifacts"));
         ArtifactRecord record = store.put(image);
         ProvenanceLog log = new ProvenanceLog(store.root());

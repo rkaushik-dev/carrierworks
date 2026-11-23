@@ -112,6 +112,11 @@ public record Bitstream(BitFile header, List<ConfigPacket> packets, String diges
         return PacketCrc.check(header.data());
     }
 
+    /** The build time the tools stamped into {@code USR_ACCESS}, if they stamped one. */
+    public Optional<BuildStamp> stamp() {
+        return BuildStamp.in(packets);
+    }
+
     /** The configuration options the image sets on the device. */
     public ConfigOptions options() {
         return ConfigOptions.read(packets);

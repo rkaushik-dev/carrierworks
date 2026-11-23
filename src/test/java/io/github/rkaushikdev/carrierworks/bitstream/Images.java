@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.carrierworks.bitstream;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -192,6 +193,11 @@ public final class Images {
             return this;
         }
 
+        /** Stamp the build time into {@code USR_ACCESS}, the way {@code USR_ACCESS TIMESTAMP} does. */
+        public Image stamp(LocalDateTime at) {
+            return write(13, new BuildStamp(at).encode());
+        }
+
         /** One more register write ahead of the frames. */
         public Image write(int register, long word) {
             options.add(Packets.type1(2, register, 1));
@@ -224,6 +230,11 @@ public final class Images {
         /** The image, read back. */
         public Bitstream bitstream() {
             return Bitstream.read(bitfile());
+        }
+
+        /** The image, read back as if from a file of that name. */
+        public Bitstream bitstream(String source) {
+            return Bitstream.read(bitfile(), source);
         }
     }
 }

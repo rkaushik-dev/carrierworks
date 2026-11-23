@@ -1,18 +1,15 @@
 package io.github.rkaushikdev.carrierworks.artifacts;
 
-import static io.github.rkaushikdev.carrierworks.bitstream.Packets.SYNC_WORD;
-import static io.github.rkaushikdev.carrierworks.bitstream.Packets.type1;
-import static io.github.rkaushikdev.carrierworks.bitstream.Packets.type2;
-import static io.github.rkaushikdev.carrierworks.bitstream.Packets.wordsToBytes;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.rkaushikdev.carrierworks.NotFound;
 import io.github.rkaushikdev.carrierworks.ValidationError;
-import io.github.rkaushikdev.carrierworks.bitstream.BitFile;
 import io.github.rkaushikdev.carrierworks.bitstream.Bitstream;
+import io.github.rkaushikdev.carrierworks.bitstream.BuildStamp;
+import io.github.rkaushikdev.carrierworks.bitstream.Images;
 import java.nio.file.Path;
-import java.util.ArrayList;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -28,15 +25,12 @@ class ProvenanceTest {
     Path tmp;
 
     private static Bitstream image() {
-        int frames = 8;
-        List<Long> words =
-                new ArrayList<>(List.of(SYNC_WORD, type1(2, 12, 1), 0x03631093L, type1(2, 2, 0), type2(2, frames)));
-        for (long word = 0; word < frames; word++) {
-            words.add(word);
-        }
-        words.addAll(List.of(type1(2, 4, 1), 5L));
-        return Bitstream.read(
-                BitFile.build("radar_frontend", "7a100tfgg484", "2025/05/26", "11:00:00", wordsToBytes(words)));
+        return Images.image()
+                .part(Images.ARTIX_PART)
+                .idcode(0x03631093L)
+                .frames(8)
+                .stamp(LocalDateTime.of(2025, 5, 26, 2, 11))
+                .bitstream();
     }
 
     /** The nightly build of the radar front end, as the build system describes it. */
@@ -50,6 +44,13 @@ class ProvenanceTest {
 
     private ArtifactStore store() {
         return new ArtifactStore(tmp.resolve("artifacts"));
+    }
+
+    @Test
+    void theImageCarriesTheBuildTimeItsRecordClaims() {
+        Provenance recorded = build(DIGEST).build();
+        assertThat(image().stamp().map(BuildStamp::describe)).contains("2025-05-26 02:11:00");
+        assertThat(recorded.builtAt()).startsWith("2025-05-26T02:11");
     }
 
     @Test
