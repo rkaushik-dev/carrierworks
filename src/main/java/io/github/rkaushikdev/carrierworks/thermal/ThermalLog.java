@@ -5,9 +5,13 @@ import io.github.rkaushikdev.carrierworks.Records;
 import io.github.rkaushikdev.carrierworks.util.Numbers;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * Recent temperature readings, per board, and the questions asked of them.
@@ -85,13 +89,27 @@ public final class ThermalLog {
         return Records.inWindow(samples.items(board), now, length, ThermalSample::at);
     }
 
-    /** Mean temperature over a window, rounded half to even, or nothing if there is no data. */
+    /**
+     * The temperature the board is judged on over a window: each sensor's mean, rounded half to
+     * even, and the hottest of those. Nothing if there is no data.
+     *
+     * <p>Sensors are not averaged together. A rack controller's inlet sensor reads thirty degrees
+     * while the die it sits beside reads ninety, and the mean of the two is a board that looks
+     * comfortable right up to the moment it shuts itself down.
+     */
     public OptionalInt average(String board, Instant now, Duration length) {
-        List<ThermalSample> inside = window(board, now, length);
-        if (inside.isEmpty()) {
-            return OptionalInt.empty();
-        }
-        return OptionalInt.of((int) Numbers.round((double) total(inside) / inside.size()));
+        return averages(board, now, length).values().stream()
+                .mapToInt(Integer::intValue)
+                .max();
+    }
+
+    /** Each sensor's mean over a window, rounded half to even, by source in name order. */
+    public Map<String, Integer> averages(String board, Instant now, Duration length) {
+        Map<String, Integer> means = new TreeMap<>();
+        bySource(window(board, now, length))
+                .forEach((source, readings) ->
+                        means.put(source, (int) Numbers.round((double) total(readings) / readings.size())));
+        return Collections.unmodifiableMap(means);
     }
 
     /** The hottest reading in a window, or nothing if there is no data. */
@@ -111,13 +129,16 @@ public final class ThermalLog {
     }
 
     /**
-     * Whether the second half of the window is warmer than the first.
+     * Whether the second half of the window is warmer than the first, on the sensor the board is
+     * judged on.
      *
-     * <p>Nothing when there is not enough to say, which is fewer than four samples, because two
-     * noisy readings will happily claim any trend.
+     * <p>Nothing when there is not enough to say, which is fewer than four samples from that
+     * sensor, because two noisy readings will happily claim any trend. Readings from two sensors
+     * are never mixed into one trend: an ambient sample landing late in the window would make a
+     * heating die look as if it were cooling.
      */
     public Optional<Boolean> rising(String board, Instant now, Duration length) {
-        List<ThermalSample> inside = window(board, now, length);
+        List<ThermalSample> inside = hottestSensor(board, now, length);
         if (inside.size() < TREND_MINIMUM) {
             return Optional.empty();
         }
@@ -135,6 +156,21 @@ public final class ThermalLog {
     /** How many readings the log holds across every board. */
     public int size() {
         return samples.size();
+    }
+
+    /** The window's readings from whichever sensor reads hottest on average, oldest first. */
+    List<ThermalSample> hottestSensor(String board, Instant now, Duration length) {
+        Map<String, List<ThermalSample>> sources = bySource(window(board, now, length));
+        Map<String, Integer> means = averages(board, now, length);
+        return means.entrySet().stream()
+                .max(Map.Entry.<String, Integer>comparingByValue())
+                .map(hottest -> sources.get(hottest.getKey()))
+                .orElse(List.of());
+    }
+
+    private static Map<String, List<ThermalSample>> bySource(List<ThermalSample> readings) {
+        return readings.stream()
+                .collect(Collectors.groupingBy(ThermalSample::source, TreeMap::new, Collectors.toList()));
     }
 
     private static long total(List<ThermalSample> readings) {

@@ -49,6 +49,16 @@ class AlarmsTest {
     }
 
     @Test
+    void aColdInletSensorDoesNotHideAHotDie() {
+        ThermalLog log = logAt("bx-14", 87_000, 88_000);
+        log.add("bx-14", NOW.minusSeconds(10), 28_000, "rack-inlet");
+        log.add("bx-14", NOW.minusSeconds(5), 28_000, "rack-inlet");
+        ThermalStatus status = book().update("bx-14", log, NOW);
+        assertThat(status.state()).isEqualTo(ThermalState.CRITICAL);
+        assertThat(status.millidegrees()).hasValue(87_500);
+    }
+
+    @Test
     void aHotBoardWarns() {
         ThermalStatus status = book().update("bx-14", logAt("bx-14", 77_000, 78_000), NOW);
         assertThat(status.state()).isEqualTo(ThermalState.WARN);

@@ -7,6 +7,7 @@ import io.github.rkaushikdev.carrierworks.ValidationError;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class ThermalSamplesTest {
@@ -79,6 +80,48 @@ class ThermalSamplesTest {
     void theAverageSmoothsTheNoiseOut() {
         ThermalLog log = logWith(60_000, 62_000, 61_000, 63_000);
         assertThat(log.average("bx-14", NOW, FIVE_MINUTES)).hasValue(61_500);
+    }
+
+    /** Die readings off the system monitor and inlet readings off the rack, interleaved. */
+    private static ThermalLog dieAndInlet(int[] die, int[] inlet) {
+        ThermalLog log = new ThermalLog();
+        Duration spacing = Duration.ofSeconds(20);
+        for (int index = 0; index < die.length; index++) {
+            Instant moment = NOW.minus(spacing.multipliedBy(die.length - index));
+            log.add("bx-14", moment, die[index]);
+            log.add("bx-14", moment.plusSeconds(5), inlet[index], "rack-inlet");
+        }
+        return log;
+    }
+
+    @Test
+    void eachSensorIsAveragedOnItsOwn() {
+        ThermalLog log = dieAndInlet(new int[] {88_000, 90_000}, new int[] {30_000, 31_000});
+        assertThat(log.averages("bx-14", NOW, FIVE_MINUTES))
+                .containsExactly(Map.entry("rack-inlet", 30_500), Map.entry("sysmon", 89_000));
+    }
+
+    @Test
+    void theBoardIsJudgedOnItsHottestSensorNotOnAMixOfThem() {
+        ThermalLog log = dieAndInlet(new int[] {88_000, 90_000}, new int[] {30_000, 31_000});
+        assertThat(log.average("bx-14", NOW, FIVE_MINUTES)).hasValue(89_000);
+    }
+
+    @Test
+    void aTrendIsReadOffOneSensorOnly() {
+        ThermalLog log =
+                dieAndInlet(new int[] {70_000, 72_000, 75_000, 78_000}, new int[] {30_000, 30_000, 29_000, 29_000});
+        assertThat(log.rising("bx-14", NOW, FIVE_MINUTES)).contains(true);
+        assertThat(log.hottestSensor("bx-14", NOW, FIVE_MINUTES))
+                .extracting(ThermalSample::source)
+                .containsOnly("sysmon");
+    }
+
+    @Test
+    void twoReadingsFromEachOfTwoSensorsAreNotEnoughForATrend() {
+        ThermalLog log = dieAndInlet(new int[] {70_000, 78_000}, new int[] {30_000, 29_000});
+        assertThat(log.window("bx-14", NOW, FIVE_MINUTES)).hasSize(4);
+        assertThat(log.rising("bx-14", NOW, FIVE_MINUTES)).isEmpty();
     }
 
     @Test
