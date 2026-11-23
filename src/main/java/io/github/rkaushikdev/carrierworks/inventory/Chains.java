@@ -1,6 +1,8 @@
 package io.github.rkaushikdev.carrierworks.inventory;
 
 import io.github.rkaushikdev.carrierworks.ChainError;
+import io.github.rkaushikdev.carrierworks.Ids;
+import io.github.rkaushikdev.carrierworks.catalog.CatalogFile;
 import io.github.rkaushikdev.carrierworks.catalog.IdCode;
 import io.github.rkaushikdev.carrierworks.jtag.BitVector;
 import io.github.rkaushikdev.carrierworks.jtag.ChainDifference;
@@ -9,6 +11,7 @@ import io.github.rkaushikdev.carrierworks.jtag.DiscoveredTap;
 import io.github.rkaushikdev.carrierworks.jtag.ScanChain;
 import io.github.rkaushikdev.carrierworks.jtag.TapPosition;
 import io.github.rkaushikdev.carrierworks.jtag.Verify;
+import io.github.rkaushikdev.carrierworks.util.JsonValues;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -33,20 +36,32 @@ public final class Chains {
 
     /**
      * Positions that sit on the header in front of the device, by carrier model, each in TDI order.
-     * This table is the only place controllers are named.
+     * The carrier file, {@link CatalogFile#CARRIERS}, is the only place controllers are named.
      */
-    public static final Map<String, List<TapPosition>> CARRIER_TAPS = carrierTaps();
+    public static final Map<String, List<TapPosition>> CARRIER_TAPS = carrierTaps(CatalogFile.carriers());
 
     private static final String DEVICE_LABEL = "u1";
 
     private Chains() {}
 
-    private static Map<String, List<TapPosition>> carrierTaps() {
-        TapPosition sysctl = new TapPosition("sysctl", 8, 0x06E5E093L);
+    /** The header positions of every carrier in the carrier file that lists any, in file order. */
+    static Map<String, List<TapPosition>> carrierTaps(Map<?, ?> carriers) {
         Map<String, List<TapPosition>> taps = new LinkedHashMap<>();
-        taps.put("rx-carrier-b", List.of(sysctl));
-        taps.put("rx-carrier-a", List.of(sysctl));
-        taps.put("hil-rig-1", List.of(sysctl, new TapPosition("pmc", 8, 0x06E1C093L)));
+        carriers.forEach((model, entry) -> {
+            List<Map<?, ?>> header =
+                    entry instanceof Map<?, ?> carrier ? CatalogFile.objects(carrier, "header") : List.of();
+            if (!header.isEmpty()) {
+                taps.put(
+                        Ids.slug(String.valueOf(model)),
+                        header.stream()
+                                .map(tap -> new TapPosition(
+                                        JsonValues.text(tap.get("label")),
+                                        CatalogFile.whole(tap, "ir_length", 0),
+                                        IdCode.parse(JsonValues.text(tap.get("idcode")))
+                                                .value()))
+                                .toList());
+            }
+        });
         return Collections.unmodifiableMap(taps);
     }
 

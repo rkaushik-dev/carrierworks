@@ -5,14 +5,16 @@ import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.Ids;
 import io.github.rkaushikdev.carrierworks.NotFound;
 import io.github.rkaushikdev.carrierworks.RailSpec;
+import io.github.rkaushikdev.carrierworks.catalog.CatalogFile;
+import io.github.rkaushikdev.carrierworks.util.JsonValues;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Every rail on one carrier, and the order they are allowed in.
@@ -35,25 +37,10 @@ import java.util.stream.Stream;
  */
 public record PowerTree(String model, List<RailStep> steps) {
 
-    private static final Map<String, PowerTree> TREES = Stream.of(
-                    new PowerTree(
-                            "rx-carrier-b",
-                            List.of(
-                                    new RailStep(rail("vccint", 1000, 12000), List.of(), 10),
-                                    new RailStep(rail("vccbram", 1000, 2000), List.of("vccint")),
-                                    new RailStep(rail("vccaux", 1800, 3000), List.of("vccint"), 8),
-                                    new RailStep(rail("vcco33", 3300, 4000), List.of("vccaux")),
-                                    new RailStep(rail("vadj", 1800, 2000), List.of("vccaux"), 12),
-                                    new RailStep(rail("mgtavcc", 1000, 3000), List.of("vccint"), 6, true),
-                                    new RailStep(rail("mgtavtt", 1200, 3000), List.of("mgtavcc"), 6, true))),
-                    new PowerTree(
-                            "tx-carrier-a",
-                            List.of(
-                                    new RailStep(rail("vccint", 1000, 4000), List.of(), 8),
-                                    new RailStep(rail("vccaux", 1800, 1500), List.of("vccint")),
-                                    new RailStep(rail("vcco33", 3300, 2000), List.of("vccaux")),
-                                    new RailStep(rail("vadj", 1800, 1000), List.of("vccaux")))))
-            .collect(Collectors.toUnmodifiableMap(PowerTree::model, Function.identity()));
+    /** How far a rail may stray either way when the carrier file does not say. */
+    public static final int DEFAULT_TOLERANCE_PERCENT = 5;
+
+    private static final Map<String, PowerTree> TREES = trees(CatalogFile.carriers());
 
     /**
      * A tree, checked: it has rails, their names are unique, every dependency is on the board, and
@@ -163,7 +150,38 @@ public record PowerTree(String model, List<RailStep> steps) {
         return List.copyOf(ordered);
     }
 
-    private static RailSpec rail(String name, int millivolts, int currentMa) {
-        return new RailSpec(name, millivolts, 5, currentMa);
+    /**
+     * Every carrier in the carrier file that lists rails, as a tree.
+     *
+     * <p>Each rail names the rails it comes {@code after}. Tolerance is five percent unless the
+     * entry says otherwise, which the UltraScale cores do: their core and block RAM supplies are
+     * held to three.
+     */
+    static Map<String, PowerTree> trees(Map<?, ?> carriers) {
+        Map<String, PowerTree> found = new TreeMap<>();
+        carriers.forEach((model, entry) -> {
+            List<Map<?, ?>> rails =
+                    entry instanceof Map<?, ?> carrier ? CatalogFile.objects(carrier, "rails") : List.of();
+            if (!rails.isEmpty()) {
+                PowerTree tree = new PowerTree(
+                        String.valueOf(model),
+                        rails.stream().map(PowerTree::step).toList());
+                found.put(tree.model(), tree);
+            }
+        });
+        return Collections.unmodifiableMap(found);
+    }
+
+    private static RailStep step(Map<?, ?> rail) {
+        RailSpec spec = new RailSpec(
+                JsonValues.text(rail.get("name")),
+                CatalogFile.whole(rail, "mv", 0),
+                CatalogFile.whole(rail, "tolerance_percent", DEFAULT_TOLERANCE_PERCENT),
+                CatalogFile.whole(rail, "ma", 0));
+        return new RailStep(
+                spec,
+                CatalogFile.texts(rail, "after"),
+                CatalogFile.whole(rail, "settle_ms", RailStep.DEFAULT_SETTLE_MS),
+                JsonValues.truthy(rail.get("down_first")));
     }
 }

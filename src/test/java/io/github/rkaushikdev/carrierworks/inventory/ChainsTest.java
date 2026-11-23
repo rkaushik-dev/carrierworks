@@ -3,13 +3,16 @@ package io.github.rkaushikdev.carrierworks.inventory;
 import static io.github.rkaushikdev.carrierworks.inventory.BoardSetup.artix;
 import static io.github.rkaushikdev.carrierworks.inventory.BoardSetup.kintex;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.rkaushikdev.carrierworks.CatalogError;
 import io.github.rkaushikdev.carrierworks.jtag.BitVector;
 import io.github.rkaushikdev.carrierworks.jtag.ChainDifference;
 import io.github.rkaushikdev.carrierworks.jtag.Discover;
 import io.github.rkaushikdev.carrierworks.jtag.ScanChain;
 import io.github.rkaushikdev.carrierworks.jtag.TapPosition;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class ChainsTest {
@@ -49,6 +52,28 @@ class ChainsTest {
     void theCarrierTableIsTheOnlyPlaceControllersAreNamed() {
         assertThat(Chains.CARRIER_TAPS).containsKey("rx-carrier-b");
         assertThat(Chains.CARRIER_TAPS).doesNotContainKey("tx-carrier-a");
+    }
+
+    @Test
+    void theHeaderPositionsComeOutOfTheCarrierFile() {
+        assertThat(Chains.CARRIER_TAPS.get("hil-rig-1"))
+                .extracting(TapPosition::label)
+                .containsExactly("sysctl", "pmc");
+        assertThat(Chains.CARRIER_TAPS.get("rx-carrier-c").getFirst().expectedIdcode())
+                .contains(0x06E5E093L);
+        Map<String, List<TapPosition>> taps = Chains.carrierTaps(Map.of(
+                "bench-rig",
+                Map.of("header", List.of(Map.of("label", "cpld", "ir_length", 8, "idcode", "0x06e1c093"))),
+                "rails-only",
+                Map.of("rails", List.of())));
+        assertThat(taps).containsOnlyKeys("bench-rig");
+        assertThat(taps.get("bench-rig").getFirst().irLength()).isEqualTo(8);
+    }
+
+    @Test
+    void aHeaderEntryThatIsNotAPositionIsRefused() {
+        assertThatThrownBy(() -> Chains.carrierTaps(Map.of("bench-rig", Map.of("header", List.of("cpld")))))
+                .isInstanceOf(CatalogError.class);
     }
 
     @Test

@@ -4,13 +4,7 @@ import io.github.rkaushikdev.carrierworks.CatalogError;
 import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.Ids;
 import io.github.rkaushikdev.carrierworks.NotFound;
-import io.github.rkaushikdev.carrierworks.util.Json;
 import io.github.rkaushikdev.carrierworks.util.JsonValues;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -42,7 +36,7 @@ public final class Cards {
     /** Where the catalogue is kept, on the class path. */
     public static final String RESOURCE = "/catalog/cards.json";
 
-    private static final Map<?, ?> DOCUMENT = load();
+    private static final Map<?, ?> DOCUMENT = CatalogFile.load(RESOURCE);
 
     /** Every connector kind the lab has, and what each will physically accept. */
     public static final Map<String, Set<String>> CONNECTORS = connectors(DOCUMENT);
@@ -86,24 +80,11 @@ public final class Cards {
         return CARDS.all();
     }
 
-    private static Map<?, ?> load() {
-        try (InputStream in = Cards.class.getResourceAsStream(RESOURCE)) {
-            if (in == null) {
-                throw new CatalogError("the card catalogue is missing", Details.of("resource", RESOURCE));
-            }
-            if (!(Json.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8)) instanceof Map<?, ?> document)) {
-                throw new CatalogError("the card catalogue is not an object", Details.of("resource", RESOURCE));
-            }
-            return document;
-        } catch (IOException failure) {
-            throw new UncheckedIOException(failure);
-        }
-    }
-
     private static Map<String, Set<String>> connectors(Map<?, ?> document) {
         Map<String, Set<String>> found = new LinkedHashMap<>();
         if (document.get("connectors") instanceof Map<?, ?> table) {
-            table.forEach((carrier, accepts) -> found.put(String.valueOf(carrier), Set.copyOf(texts(accepts))));
+            table.forEach((carrier, accepts) -> found.put(
+                    String.valueOf(carrier), Set.copyOf(CatalogFile.texts(Map.of("accepts", accepts), "accepts"))));
         }
         return Collections.unmodifiableMap(found);
     }
@@ -113,35 +94,22 @@ public final class Cards {
      * with no {@code transceivers} uses none.
      */
     static List<CardSpec> cards(Map<?, ?> document) {
-        List<CardSpec> found = new ArrayList<>();
-        if (!(document.get("cards") instanceof List<?> entries)) {
+        if (!(document.get("cards") instanceof List<?>)) {
             throw new CatalogError("the card catalogue lists no cards", Details.of("resource", RESOURCE));
         }
-        for (Object item : entries) {
-            if (!(item instanceof Map<?, ?> entry)) {
-                throw new CatalogError(
-                        "a card in the catalogue is not an object", Details.of("given", JsonValues.text(item)));
-            }
-            Object vadj = entry.get("vadj_mv");
-            found.add(new CardSpec(
-                    JsonValues.text(entry.get("name")),
-                    JsonValues.text(entry.get("vendor")),
-                    JsonValues.text(entry.get("connector")),
-                    Set.copyOf(texts(entry.get("provides"))),
-                    (int) JsonValues.whole(entry.get("power_draw_mw")),
-                    vadj == null ? Optional.empty() : Optional.of((int) JsonValues.whole(vadj)),
-                    (int) JsonValues.whole(JsonValues.get(entry, "transceivers", 0L)),
-                    JsonValues.text(JsonValues.get(entry, "notes", "")),
-                    Set.copyOf(texts(JsonValues.get(entry, "tags", List.of())))));
-        }
-        return List.copyOf(found);
-    }
-
-    private static List<String> texts(Object value) {
-        if (!(value instanceof List<?> items)) {
-            throw new CatalogError(
-                    "a list was expected in the card catalogue", Details.of("given", JsonValues.text(value)));
-        }
-        return items.stream().map(JsonValues::text).toList();
+        return CatalogFile.objects(document, "cards").stream()
+                .map(entry -> new CardSpec(
+                        JsonValues.text(entry.get("name")),
+                        JsonValues.text(entry.get("vendor")),
+                        JsonValues.text(entry.get("connector")),
+                        Set.copyOf(CatalogFile.texts(entry, "provides")),
+                        CatalogFile.whole(entry, "power_draw_mw", 0),
+                        entry.containsKey("vadj_mv")
+                                ? Optional.of(CatalogFile.whole(entry, "vadj_mv", 0))
+                                : Optional.empty(),
+                        CatalogFile.whole(entry, "transceivers", 0),
+                        JsonValues.text(JsonValues.get(entry, "notes", "")),
+                        Set.copyOf(CatalogFile.texts(entry, "tags"))))
+                .toList();
     }
 }

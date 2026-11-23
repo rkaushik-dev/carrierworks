@@ -1,0 +1,45 @@
+{
+  "rx-carrier-a": {
+    "header": [{"label": "sysctl", "ir_length": 8, "idcode": "0x06e5e093"}]
+  },
+  "rx-carrier-b": {
+    "header": [{"label": "sysctl", "ir_length": 8, "idcode": "0x06e5e093"}],
+    "rails": [
+      {"name": "vccint", "mv": 1000, "ma": 12000, "settle_ms": 10},
+      {"name": "vccbram", "mv": 1000, "ma": 2000, "after": ["vccint"]},
+      {"name": "vccaux", "mv": 1800, "ma": 3000, "after": ["vccint"], "settle_ms": 8},
+      {"name": "vcco33", "mv": 3300, "ma": 4000, "after": ["vccaux"]},
+      {"name": "vadj", "mv": 1800, "ma": 2000, "after": ["vccaux"], "settle_ms": 12},
+      {"name": "mgtavcc", "mv": 1000, "ma": 3000, "after": ["vccint"], "settle_ms": 6, "down_first": true},
+      {"name": "mgtavtt", "mv": 1200, "ma": 3000, "after": ["mgtavcc"], "settle_ms": 6, "down_first": true}
+    ]
+  },
+  "rx-carrier-c": {
+    "header": [{"label": "sysctl", "ir_length": 8, "idcode": "0x06e5e093"}],
+    "rails": [
+      {"name": "vccint", "mv": 950, "tolerance_percent": 3, "ma": 20000, "settle_ms": 10},
+      {"name": "vccbram", "mv": 950, "tolerance_percent": 3, "ma": 3000, "after": ["vccint"]},
+      {"name": "vccaux", "mv": 1800, "ma": 3000, "after": ["vccint"], "settle_ms": 8},
+      {"name": "vccaux-io", "mv": 1800, "ma": 2000, "after": ["vccaux"]},
+      {"name": "vcco18", "mv": 1800, "ma": 4000, "after": ["vccaux-io"]},
+      {"name": "vadj", "mv": 1800, "ma": 3000, "after": ["vccaux-io"], "settle_ms": 12},
+      {"name": "mgtavcc", "mv": 1000, "ma": 6000, "after": ["vccint"], "settle_ms": 6, "down_first": true},
+      {"name": "mgtavtt", "mv": 1200, "ma": 6000, "after": ["mgtavcc"], "settle_ms": 6, "down_first": true},
+      {"name": "mgtvccaux", "mv": 1800, "ma": 1000, "after": ["vccaux"], "down_first": true}
+    ]
+  },
+  "hil-rig-1": {
+    "header": [
+      {"label": "sysctl", "ir_length": 8, "idcode": "0x06e5e093"},
+      {"label": "pmc", "ir_length": 8, "idcode": "0x06e1c093"}
+    ]
+  },
+  "tx-carrier-a": {
+    "rails": [
+      {"name": "vccint", "mv": 1000, "ma": 4000, "settle_ms": 8},
+      {"name": "vccaux", "mv": 1800, "ma": 1500, "after": ["vccint"]},
+      {"name": "vcco33", "mv": 3300, "ma": 2000, "after": ["vccaux"]},
+      {"name": "vadj", "mv": 1800, "ma": 1000, "after": ["vccaux"]}
+    ]
+  }
+}

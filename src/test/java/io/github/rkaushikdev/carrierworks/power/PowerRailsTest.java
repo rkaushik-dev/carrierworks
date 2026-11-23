@@ -8,6 +8,7 @@ import io.github.rkaushikdev.carrierworks.ConfigurationError;
 import io.github.rkaushikdev.carrierworks.NotFound;
 import io.github.rkaushikdev.carrierworks.RailSpec;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class PowerRailsTest {
@@ -29,6 +30,63 @@ class PowerRailsTest {
         PowerTree tree = PowerTree.forModel("rx-carrier-b");
         assertThat(tree.names()).contains("vccint");
         assertThat(tree.step("vadj").rail().nominalMv()).isEqualTo(1800);
+    }
+
+    @Test
+    void theUltraScaleCarrierHoldsItsCoreToThreePercent() {
+        PowerTree tree = PowerTree.forModel("rx-carrier-c");
+        RailSpec core = tree.step("vccint").rail();
+        assertThat(core.nominalMv()).isEqualTo(950);
+        assertThat(core.lowLimitMv()).isEqualTo(922);
+        assertThat(core.highLimitMv()).isEqualTo(978);
+        assertThat(tree.step("vccaux").rail().tolerancePercent()).isEqualTo(PowerTree.DEFAULT_TOLERANCE_PERCENT);
+    }
+
+    @Test
+    void theUltraScaleCarrierBringsItsBanksUpAfterTheAuxiliaryIo() {
+        List<String> order = names(PowerTree.forModel("rx-carrier-c").orderUp());
+        assertThat(order.indexOf("vccaux-io")).isGreaterThan(order.indexOf("vccaux"));
+        assertThat(order.indexOf("vcco18")).isGreaterThan(order.indexOf("vccaux-io"));
+        assertThat(order.indexOf("mgtavtt")).isGreaterThan(order.indexOf("mgtavcc"));
+        List<String> down = names(PowerTree.forModel("rx-carrier-c").orderDown());
+        assertThat(down.subList(0, 3)).containsExactlyInAnyOrder("mgtavtt", "mgtavcc", "mgtvccaux");
+    }
+
+    @Test
+    void treesAreReadFromTheCarrierFile() {
+        Map<String, PowerTree> trees = PowerTree.trees(Map.of(
+                "bench-rig",
+                Map.of(
+                        "rails",
+                        List.of(
+                                Map.of("name", "vccint", "mv", 1000, "ma", 500),
+                                Map.of(
+                                        "name",
+                                        "vcco",
+                                        "mv",
+                                        3300,
+                                        "ma",
+                                        200,
+                                        "after",
+                                        List.of("vccint"),
+                                        "settle_ms",
+                                        0))),
+                "header-only",
+                Map.of("header", List.of())));
+        assertThat(trees).containsOnlyKeys("bench-rig");
+        PowerTree tree = trees.get("bench-rig");
+        assertThat(tree.step("vcco").dependsOn()).containsExactly("vccint");
+        assertThat(tree.step("vcco").settleMs()).isZero();
+        assertThat(tree.step("vccint").settleMs()).isEqualTo(RailStep.DEFAULT_SETTLE_MS);
+        assertThat(tree.step("vccint").downFirst()).isFalse();
+    }
+
+    @Test
+    void aCarrierFileRailWithAMissingDependencyIsRefused() {
+        Map<String, Object> carriers = Map.of(
+                "bench-rig",
+                Map.of("rails", List.of(Map.of("name", "vcco", "mv", 3300, "ma", 200, "after", List.of("vccint")))));
+        assertThatThrownBy(() -> PowerTree.trees(carriers)).isInstanceOf(ConfigurationError.class);
     }
 
     @Test
