@@ -37,6 +37,8 @@ public final class Measure {
             Map.entry("gib", 1024L * 1024 * 1024));
 
     private static final Pattern SIZE = Pattern.compile("(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>[a-z]*)");
+    private static final Pattern LITERAL = Pattern.compile(
+            "([+-]?)(?:0[xX]((?:_?[0-9a-fA-F])+)|0[oO]((?:_?[0-7])+)|0[bB]((?:_?[01])+)|(0+(?:_?0)*|[1-9](?:_?[0-9])*))");
     private static final Pattern NANOSECONDS = Pattern.compile("\\d+(\\.\\d{1,3})?");
 
     private Measure() {}
@@ -85,6 +87,45 @@ public final class Measure {
             throw new ValidationError("size is not a whole number of bytes", "size", Details.of("given", text));
         }
         return scaled.longValueExact();
+    }
+
+    /**
+     * Read a flash address or a length the way people type one at a prompt.
+     *
+     * <p>Either a whole number written the way a program literal is, an optional sign and then
+     * decimal with no leading zero or {@code 0x}, {@code 0o} or {@code 0b} and digits in that base,
+     * single underscores allowed between digits; or a size with its unit, so {@code 16MiB} and
+     * {@code 0x1000000} are the same place on a part. Surrounding white space is ignored.
+     *
+     * @throws ValidationError when the text is neither, or names a number a long cannot hold
+     */
+    public static long parseAddress(String text) {
+        String stripped = text.strip();
+        Matcher literal = LITERAL.matcher(stripped);
+        if (!literal.matches()) {
+            Matcher size = SIZE.matcher(stripped.toLowerCase(Locale.ROOT));
+            if (size.matches() && !size.group("unit").isEmpty()) {
+                return parseSize(stripped);
+            }
+            throw new ValidationError("cannot read an address from " + Repr.of(text), "address");
+        }
+        int radix = 10;
+        String digits = literal.group(5);
+        if (literal.group(2) != null) {
+            radix = 16;
+            digits = literal.group(2);
+        } else if (literal.group(3) != null) {
+            radix = 8;
+            digits = literal.group(3);
+        } else if (literal.group(4) != null) {
+            radix = 2;
+            digits = literal.group(4);
+        }
+        try {
+            return Long.parseLong(literal.group(1) + digits.replace("_", ""), radix);
+        } catch (NumberFormatException tooLarge) {
+            throw new ValidationError("cannot read an address from " + Repr.of(text), "address");
+        }
     }
 
     /** Bytes back to something a person reads without counting zeros. */

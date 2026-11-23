@@ -12,6 +12,29 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class MeasureTest {
 
+    @ParameterizedTest
+    @CsvSource({
+        "0, 0",
+        "4096, 4096",
+        "0x800000, 8388608",
+        "0X80_0000, 8388608",
+        "0o17, 15",
+        "0b1010, 10",
+        "-16, -16",
+        "8MiB, 8388608",
+        "' 16 m ', 16777216",
+        "64k, 65536"
+    })
+    void addressesReadAsLiteralsOrSizes(String text, long expected) {
+        assertThat(Measure.parseAddress(text)).isEqualTo(expected);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "0x", "08", "1__0", "0xfffffffffffffffff", "12 parsecs", "_1"})
+    void unreadableAddressesAreRefused(String text) {
+        assertThatThrownBy(() -> Measure.parseAddress(text)).isInstanceOf(ValidationError.class);
+    }
+
     @Test
     void helpersAreBinary() {
         assertThat(Measure.kib(64)).isEqualTo(65536);

@@ -1,6 +1,9 @@
 package io.github.rkaushikdev.carrierworks.cli;
 
+import io.github.rkaushikdev.carrierworks.Details;
+import io.github.rkaushikdev.carrierworks.Measure;
 import io.github.rkaushikdev.carrierworks.NotFound;
+import io.github.rkaushikdev.carrierworks.ValidationError;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactRecord;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactStore;
 import io.github.rkaushikdev.carrierworks.artifacts.PromotionDecision;
@@ -11,6 +14,8 @@ import io.github.rkaushikdev.carrierworks.bitstream.Bitstream;
 import io.github.rkaushikdev.carrierworks.bitstream.ConfigOptions;
 import io.github.rkaushikdev.carrierworks.bitstream.Mcs;
 import io.github.rkaushikdev.carrierworks.bitstream.PacketCrc;
+import io.github.rkaushikdev.carrierworks.flash.FlashLayout;
+import io.github.rkaushikdev.carrierworks.flash.FlashRegion;
 import io.github.rkaushikdev.carrierworks.reports.BuildReport;
 import io.github.rkaushikdev.carrierworks.reports.LoadCounts;
 import io.github.rkaushikdev.carrierworks.services.Bundle;
@@ -31,8 +36,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -391,14 +394,6 @@ final class ImageCommands {
     @Command(name = "export", description = "Write an image out for a programmer that is not this bench.")
     static final class Export extends BenchCommand {
 
-        /**
-         * A whole number written the way a program literal is: an optional sign, then decimal with no
-         * leading zero, or {@code 0x}, {@code 0o} or {@code 0b} and digits in that base, with single
-         * underscores allowed between digits.
-         */
-        private static final Pattern LITERAL = Pattern.compile(
-                "([+-]?)(?:0[xX]((?:_?[0-9a-fA-F])+)|0[oO]((?:_?[0-7])+)|0[bB]((?:_?[01])+)|(0+(?:_?0)*|[1-9](?:_?[0-9])*))");
-
         @Parameters(paramLabel = "DIGEST")
         private String digest;
 
@@ -408,14 +403,20 @@ final class ImageCommands {
         @Option(names = "--format", paramLabel = "TEXT", description = "bin or mcs")
         private String shape = "bin";
 
-        @Option(names = "--at", paramLabel = "TEXT", description = "the flash address it will be written to")
+        @Option(
+                names = "--at",
+                paramLabel = "TEXT",
+                description = "the flash address it will be written to, a size such as 8MiB, or a region")
         private String start = "0";
 
         @Option(
                 names = "--pad-to",
-                paramLabel = "INTEGER",
-                description = "pad out to this many bytes with erased flash")
-        private long pad;
+                paramLabel = "TEXT",
+                description = "pad out to this many bytes with erased flash, or a size such as 4MiB")
+        private String pad = "0";
+
+        @Option(names = "--board", paramLabel = "TEXT", description = "the board whose flash layout --at names")
+        private Optional<String> board = Optional.empty();
 
         @Option(names = "--spi", description = "bit reverse each byte for a spi part")
         private boolean spi;
@@ -425,15 +426,25 @@ final class ImageCommands {
             if (!shape.equals("bin") && !shape.equals("mcs")) {
                 throw new UsageError("the format is bin or mcs");
             }
-            long address = address(start);
+            Optional<FlashLayout> layout = board.map(tag -> FlashLayout.halves(
+                    context.apply(unit -> unit.boards().get(tag)).flashSpec()));
+            long address = address(layout);
             if (address < 0) {
                 throw new UsageError("a flash address is not negative");
             }
             ArtifactStore store = store(context);
             ArtifactRecord record = context.apply(unit -> unit.artifacts().get(digest));
             byte[] data = store.read(record.digest());
-            if (pad != 0) {
-                data = Binary.padTo(data, pad);
+            long padTo = padding();
+            if (padTo != 0) {
+                data = Binary.padTo(data, padTo);
+            }
+            Optional<FlashRegion> landing = layout.flatMap(found -> found.regionAt(address));
+            if (landing.isPresent() && address + data.length > landing.get().end()) {
+                throw new ValidationError(
+                        "the image runs past the end of the " + landing.get().name() + " region",
+                        "at",
+                        Details.of("wanted", data.length, "room", landing.get().end() - address));
             }
             if (spi) {
                 data = Binary.reverseBits(data);
@@ -448,7 +459,9 @@ final class ImageCommands {
                 throw new UncheckedIOException(failure);
             }
             context.say(
-                    record.shortDigest() + " written to " + into + " as " + shape + ", " + data.length + " bytes",
+                    record.shortDigest() + " written to " + into + " as " + shape + ", " + data.length + " bytes"
+                            + landing.map(region -> ", for the " + region.name() + " region")
+                                    .orElse(""),
                     fields(
                             "digest",
                             record.digest(),
@@ -460,38 +473,37 @@ final class ImageCommands {
                             data.length,
                             "address",
                             address,
+                            "region",
+                            landing.map(FlashRegion::name).orElse(""),
                             "spi",
                             spi));
             return OK;
         }
 
         /**
-         * The address as typed: decimal, or hex, octal or binary behind its prefix, surrounding white
-         * space ignored.
+         * The address as typed, or the start of the named region on the board's flash.
          *
-         * @throws UsageError when the text is not a whole number, or not one a long can hold
+         * @throws UsageError when it is neither, or a region is named with no board to find it on
          */
-        private static long address(String text) {
-            Matcher literal = LITERAL.matcher(text.strip());
-            if (!literal.matches()) {
-                throw new UsageError("a flash address is a whole number, not " + Repr.of(text));
-            }
-            int radix = 10;
-            String digits = literal.group(5);
-            if (literal.group(2) != null) {
-                radix = 16;
-                digits = literal.group(2);
-            } else if (literal.group(3) != null) {
-                radix = 8;
-                digits = literal.group(3);
-            } else if (literal.group(4) != null) {
-                radix = 2;
-                digits = literal.group(4);
+        private long address(Optional<FlashLayout> layout) {
+            String text = start.strip();
+            if (!text.isEmpty() && text.chars().allMatch(Character::isLetter)) {
+                return layout.orElseThrow(() -> new UsageError("give --board to export to a named region"))
+                        .region(text)
+                        .start();
             }
             try {
-                return Long.parseLong(literal.group(1) + digits.replace("_", ""), radix);
-            } catch (NumberFormatException tooLarge) {
-                throw new UsageError("a flash address is a whole number, not " + Repr.of(text));
+                return Measure.parseAddress(start);
+            } catch (ValidationError unreadable) {
+                throw new UsageError("a flash address is a whole number, a size or a region, not " + Repr.of(start));
+            }
+        }
+
+        private long padding() {
+            try {
+                return Measure.parseAddress(pad);
+            } catch (ValidationError unreadable) {
+                throw new UsageError("padding is a whole number of bytes or a size, not " + Repr.of(pad));
             }
         }
     }
