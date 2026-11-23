@@ -132,6 +132,34 @@ class CliImagesTest {
         assertThat(result.output()).contains("radar_frontend");
         assertThat(result.output()).contains("timing   not read");
         assertThat(result.output()).contains("loads    0 passed, 0 failed");
+        assertThat(result.output()).contains("options  defaults");
+        assertThat(result.output()).contains("crc      crc not written");
+    }
+
+    @Test
+    void showingAnImageSaysWhatItSetsOnTheDevice() throws IOException {
+        Files.write(
+                root.resolve("quad.bit"),
+                Images.image().spiRead(0x6C).watchdog(0x2000).frames(24).bitfile());
+        String digest = shell.run("--json", "image", "upload", file("quad.bit"))
+                .json()
+                .get("digest")
+                .asText();
+        Shell.Result result = shell.run("image", "show", digest);
+        assertThat(result.output()).contains("options  x4 read 0x6c, 4 address bytes, watchdog 0x00002000");
+        JsonNode body = shell.run("--json", "image", "show", digest).json();
+        assertThat(body.get("options").asText()).isEqualTo("x4 read 0x6c, 4 address bytes, watchdog 0x00002000");
+        assertThat(body.get("crc").asText()).isEqualTo("crc not written");
+    }
+
+    @Test
+    void anImageThatFailsItsCrcIsNotStored() throws IOException {
+        Files.write(
+                root.resolve("bad.bit"), Images.image().write(0, 0x1234_5678L).bitfile());
+        Shell.Result result = shell.run("image", "upload", file("bad.bit"));
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.output()).contains("fails its own crc check");
+        assertThat(shell.run("--json", "image", "list").json()).isEmpty();
     }
 
     @Test

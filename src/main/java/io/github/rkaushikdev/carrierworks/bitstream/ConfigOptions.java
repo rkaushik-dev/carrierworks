@@ -38,6 +38,11 @@ public record ConfigOptions(
     private static final long WATCHDOG_COUNT = 0x3FFF_FFFFL;
     private static final long ALL_BITS = 0xFFFF_FFFFL;
 
+    /** Read the options out of the configuration data a store keeps. */
+    public static ConfigOptions of(byte[] configData) {
+        return read(Packets.parse(configData));
+    }
+
     /** Read the options out of a packet stream, in stream order. */
     public static ConfigOptions read(List<ConfigPacket> packets) {
         Optional<SpiRead> spiRead = Optional.empty();

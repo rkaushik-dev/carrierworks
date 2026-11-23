@@ -128,6 +128,13 @@ class ConfigOptionsTest {
     }
 
     @Test
+    void theStoredConfigurationDataReadsTheSameAsTheImage() {
+        Images.Image image = Images.image().spiRead(0x3B).watchdog(0x400);
+        assertThat(ConfigOptions.of(image.configWords()))
+                .isEqualTo(image.bitstream().options());
+    }
+
+    @Test
     void theSpiReadCommandHasAName() {
         Bitstream image = Images.image().write(4, 18).bitstream();
         assertThat(image.commands()).containsExactly("bspi_read", "start");

@@ -10,7 +10,6 @@ import io.github.rkaushikdev.carrierworks.TransientBenchError;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactRecord;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactStore;
 import io.github.rkaushikdev.carrierworks.bitstream.ConfigOptions;
-import io.github.rkaushikdev.carrierworks.bitstream.Packets;
 import io.github.rkaushikdev.carrierworks.flash.EraseUnit;
 import io.github.rkaushikdev.carrierworks.flash.FlashLayout;
 import io.github.rkaushikdev.carrierworks.flash.FlashPlan;
@@ -147,7 +146,7 @@ public final class JobRunner {
                 .timingClosed(timingClosed)
                 .requireTiming(settings.requireTimingClosure())
                 .wear(wear)
-                .options(ConfigOptions.read(Packets.parse(store.read(record.digest()))))
+                .options(ConfigOptions.of(store.read(record.digest())))
                 .report();
         if (!report.allowed()) {
             String reason = String.join("; ", report.blockers());

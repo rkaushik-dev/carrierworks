@@ -8,7 +8,9 @@ import io.github.rkaushikdev.carrierworks.artifacts.PromotionEvidence;
 import io.github.rkaushikdev.carrierworks.artifacts.Provenance;
 import io.github.rkaushikdev.carrierworks.bitstream.Binary;
 import io.github.rkaushikdev.carrierworks.bitstream.Bitstream;
+import io.github.rkaushikdev.carrierworks.bitstream.ConfigOptions;
 import io.github.rkaushikdev.carrierworks.bitstream.Mcs;
+import io.github.rkaushikdev.carrierworks.bitstream.PacketCrc;
 import io.github.rkaushikdev.carrierworks.reports.BuildReport;
 import io.github.rkaushikdev.carrierworks.reports.LoadCounts;
 import io.github.rkaushikdev.carrierworks.services.Bundle;
@@ -24,7 +26,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -178,7 +182,16 @@ final class ImageCommands {
         private String digest;
 
         private record Known(
-                ArtifactRecord record, Optional<BuildReport> report, List<Provenance> builds, LoadCounts loads) {}
+                ArtifactRecord record, Optional<BuildReport> report, List<Provenance> builds, LoadCounts loads) {
+
+            Optional<Boolean> closed() {
+                return report.map(BuildReport::closed);
+            }
+
+            List<String> buildIds() {
+                return builds.stream().map(Provenance::buildId).toList();
+            }
+        }
 
         @Override
         int run(Context context) {
@@ -188,9 +201,9 @@ final class ImageCommands {
                     unit.provenance().forDigest(digest),
                     Registry.countedLoads(unit, digest)));
             ArtifactRecord record = known.record();
-            Optional<Boolean> closed = known.report().map(BuildReport::closed);
-            List<String> builds =
-                    known.builds().stream().map(Provenance::buildId).toList();
+            byte[] data = store(context).read(record.digest());
+            String options = ConfigOptions.of(data).describe();
+            String crc = PacketCrc.check(data).describe();
             if (context.asJson()) {
                 context.say(
                         "",
@@ -201,22 +214,31 @@ final class ImageCommands {
                                 "channel", record.channel(),
                                 "kind", record.kind(),
                                 "bytes", record.length(),
-                                "timing_closed", closed,
+                                "timing_closed", known.closed(),
                                 "worst_slack_ps",
                                         known.report()
                                                 .map(report -> report.timing().worstSlackPs()),
-                                "builds", builds,
+                                "builds", known.buildIds(),
                                 "loads_passed", known.loads().passed(),
-                                "loads_failed", known.loads().failed()));
+                                "loads_failed", known.loads().failed(),
+                                "options", options,
+                                "crc", crc));
                 return OK;
             }
+            List<String> builds = known.buildIds();
             context.echo(record.design() + " " + record.shortDigest() + " for " + record.device());
-            context.echo("channel  " + record.channel() + " (" + record.kind() + ", " + record.length() + " bytes)");
-            context.echo("timing   "
-                    + closed.map(yes -> yes ? "closed" : "did not close").orElse("not read"));
-            context.echo("builds   " + (builds.isEmpty() ? "none recorded" : String.join(", ", builds)));
-            context.echo("loads    " + known.loads().passed() + " passed, "
-                    + known.loads().failed() + " failed");
+            Map<String, String> rows = new LinkedHashMap<>();
+            rows.put("channel", record.channel() + " (" + record.kind() + ", " + record.length() + " bytes)");
+            rows.put(
+                    "timing",
+                    known.closed().map(yes -> yes ? "closed" : "did not close").orElse("not read"));
+            rows.put("builds", builds.isEmpty() ? "none recorded" : String.join(", ", builds));
+            rows.put(
+                    "loads",
+                    known.loads().passed() + " passed, " + known.loads().failed() + " failed");
+            rows.put("options", options);
+            rows.put("crc", crc);
+            rows.forEach((label, value) -> context.echo(String.format(Locale.ROOT, "%-8s %s", label, value)));
             return OK;
         }
     }
