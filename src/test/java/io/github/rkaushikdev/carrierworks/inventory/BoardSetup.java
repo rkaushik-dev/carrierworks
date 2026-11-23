@@ -63,7 +63,7 @@ public final class BoardSetup {
 
         private final String asset;
         private final String model;
-        private final String part;
+        private String part;
         private String flash;
         private String location;
         private Optional<String> serial;
@@ -94,6 +94,12 @@ public final class BoardSetup {
             this.pduName = pduName;
             this.adapterModel = adapterModel;
             this.slots = slots;
+        }
+
+        /** The part fitted, as its ordering code. */
+        public Carrier part(String value) {
+            part = value;
+            return this;
         }
 
         /** The configuration flash part fitted. */

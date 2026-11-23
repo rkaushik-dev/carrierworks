@@ -50,6 +50,7 @@ public final class AlarmBook {
     private final Duration staleAfter;
     private final int riseLimitMc;
     private final Map<String, ThermalStatus> statuses = new TreeMap<>();
+    private final Map<String, ThermalLimits> boardLimits = new TreeMap<>();
 
     /** A book deciding on the last minute of readings and calling a board unknown after three. */
     public AlarmBook(ThermalLimits limits) {
@@ -87,9 +88,23 @@ public final class AlarmBook {
         return riseLimitMc;
     }
 
-    /** The thresholds every board is judged against. */
+    /** The thresholds a board is judged against unless it has its own. */
     public ThermalLimits limits() {
         return limits;
+    }
+
+    /**
+     * Judge one board against its own thresholds from now on, which is what a board whose part is
+     * rated hotter or cooler than the rest of the bench needs.
+     */
+    public AlarmBook limit(String board, ThermalLimits own) {
+        boardLimits.put(Records.boardKey(board), own);
+        return this;
+    }
+
+    /** The thresholds this board is judged against. */
+    public ThermalLimits limitsFor(String board) {
+        return boardLimits.getOrDefault(Records.boardKey(board), limits);
     }
 
     /** How much recent history the state is decided on. */
@@ -139,7 +154,7 @@ public final class AlarmBook {
         ThermalState previous = held.map(ThermalStatus::state)
                 .filter(state -> state != ThermalState.UNKNOWN)
                 .orElse(ThermalState.NORMAL);
-        ThermalState state = limits.nextState(previous, reading);
+        ThermalState state = limitsFor(tag).nextState(previous, reading);
         if (state == ThermalState.NORMAL
                 && log.risePerMinute(tag, now, TREND_WINDOW).orElse(0) > riseLimitMc) {
             state = ThermalState.WARN;

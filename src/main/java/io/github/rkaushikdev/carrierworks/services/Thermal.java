@@ -41,7 +41,11 @@ public final class Thermal {
     public static final Duration DEFAULT_RETENTION = Duration.ofDays(7);
 
     /** The junction range the limits fall back to when the bench has no boards to judge by. */
-    private static final JunctionRange COMMERCIAL = new JunctionRange(0, 85);
+    /**
+     * What a reading from a board the book has not been told about is judged against: the coolest
+     * grade the lab buys, because nothing is known about the part and that is the safe guess.
+     */
+    public static final ThermalLimits UNRATED = ThermalLimits.fromJunctionRange(new JunctionRange(0, 85));
 
     private static final String ACTOR = "thermal";
     private static final Set<SupervisorAction.Kind> WORTH_A_LINE =
@@ -113,19 +117,13 @@ public final class Thermal {
     }
 
     /**
-     * The tightest limits any part on the bench is rated for.
+     * The limits one board's part is rated for.
      *
-     * <p>One book watches the whole bench, so it gets one set of thresholds, and the only safe way
-     * to pick them is the coolest part fitted. A rack of industrial parts with one commercial board
-     * in it is judged by the commercial board, which is the board that will fail first. An empty
-     * bench is judged as commercial.
+     * <p>Judging the whole bench by its coolest part used to shut an industrial board down at 85
+     * degrees because a commercial one sat in the next rack. A part rated to 100 is allowed to 100.
      */
-    public static ThermalLimits limitsFor(UnitOfWork unit) {
-        int top = unit.boards().all().stream()
-                .mapToInt(board -> board.part().junctionRange().high())
-                .min()
-                .orElse(COMMERCIAL.high());
-        return ThermalLimits.fromJunctionRange(new JunctionRange(0, top));
+    public static ThermalLimits limitsFor(Board board) {
+        return ThermalLimits.fromJunctionRange(board.part().junctionRange());
     }
 
     /** {@link #statusOf(UnitOfWork, Instant, BenchSettings, Duration)} on the default settings and window. */
@@ -206,7 +204,9 @@ public final class Thermal {
     }
 
     private static AlarmBook freshBook(UnitOfWork unit, BenchSettings settings) {
-        return new AlarmBook(
-                limitsFor(unit), AlarmBook.DEFAULT_WINDOW, Duration.ofSeconds(settings.thermalStaleSeconds()));
+        AlarmBook book =
+                new AlarmBook(UNRATED, AlarmBook.DEFAULT_WINDOW, Duration.ofSeconds(settings.thermalStaleSeconds()));
+        unit.boards().all().forEach(board -> book.limit(board.tag(), limitsFor(board)));
+        return book;
     }
 }

@@ -87,6 +87,19 @@ class AlarmsTest {
     }
 
     @Test
+    void aBoardWithItsOwnLimitsIsJudgedByThem() {
+        AlarmBook mixed = book().limit("BX-0015", new ThermalLimits(66_000, 76_000, 80_000));
+        assertThat(mixed.limitsFor("bx-15").shutdownMc()).isEqualTo(80_000);
+        assertThat(mixed.limitsFor("bx-14")).isEqualTo(limits());
+        ThermalLog log = logAt("bx-14", 78_000, 78_000);
+        logAt("bx-15", 78_000, 78_000)
+                .window("bx-15", NOW, Duration.ofMinutes(5))
+                .forEach(log::record);
+        assertThat(mixed.update("bx-14", log, NOW).state()).isEqualTo(ThermalState.WARN);
+        assertThat(mixed.update("bx-15", log, NOW).state()).isEqualTo(ThermalState.CRITICAL);
+    }
+
+    @Test
     void aHotBoardWarns() {
         ThermalStatus status = book().update("bx-14", logAt("bx-14", 77_000, 78_000), NOW);
         assertThat(status.state()).isEqualTo(ThermalState.WARN);

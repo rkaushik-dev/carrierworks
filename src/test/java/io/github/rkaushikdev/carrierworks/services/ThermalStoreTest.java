@@ -7,7 +7,9 @@ import io.github.rkaushikdev.carrierworks.AuditEntry;
 import io.github.rkaushikdev.carrierworks.BenchSettings;
 import io.github.rkaushikdev.carrierworks.NotFound;
 import io.github.rkaushikdev.carrierworks.ThermalLimits;
+import io.github.rkaushikdev.carrierworks.ThermalState;
 import io.github.rkaushikdev.carrierworks.ValidationError;
+import io.github.rkaushikdev.carrierworks.inventory.Board;
 import io.github.rkaushikdev.carrierworks.inventory.BoardSetup;
 import io.github.rkaushikdev.carrierworks.inventory.BoardStatus;
 import io.github.rkaushikdev.carrierworks.persistence.BenchDatabase;
@@ -20,6 +22,7 @@ import io.github.rkaushikdev.carrierworks.thermal.ThermalStatus;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
@@ -64,6 +67,35 @@ class ThermalStoreTest {
 
     private static List<SupervisorAction.Kind> kinds(List<SupervisorAction> actions) {
         return actions.stream().map(SupervisorAction::action).toList();
+    }
+
+    @Test
+    void eachBoardIsJudgedAgainstItsOwnPartsGrade() {
+        database.run(unit -> {
+            Inventory.addBoard(unit, BoardSetup.kintex("bx-14").build(), WHEN.minus(Duration.ofDays(1)));
+            Inventory.addBoard(
+                    unit,
+                    BoardSetup.kintex("bx-16")
+                            .location("rack-2/shelf-04/slot-4")
+                            .serial("210308AB9999")
+                            .outlet(8)
+                            .part("XC7K325T-2FFG900C")
+                            .build(),
+                    WHEN.minus(Duration.ofDays(1)));
+            stream(unit, "bx-14", 88_000, 88_000, 88_000);
+            stream(unit, "bx-16", 88_000, 88_000, 88_000);
+            Map<String, ThermalState> states = Thermal.statusOf(unit, WHEN).stream()
+                    .collect(Collectors.toMap(ThermalStatus::board, ThermalStatus::state));
+            assertThat(states).containsEntry("bx-14", ThermalState.WARN).containsEntry("bx-16", ThermalState.SHUTDOWN);
+        });
+    }
+
+    @Test
+    void aBoardIsRatedByItsTemperatureGrade() {
+        Board industrial = BoardSetup.kintex();
+        assertThat(Thermal.limitsFor(industrial).shutdownMc()).isEqualTo(100_000);
+        assertThat(Thermal.limitsFor(industrial).warnMc()).isEqualTo(86_000);
+        assertThat(Thermal.UNRATED.shutdownMc()).isEqualTo(85_000);
     }
 
     @Test
