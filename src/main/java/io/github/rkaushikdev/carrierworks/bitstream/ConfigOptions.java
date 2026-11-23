@@ -65,6 +65,14 @@ public record ConfigOptions(
         return new ConfigOptions(spiRead, encrypted, compressed, watchdog);
     }
 
+    /**
+     * The read the device ends up using: the one the image asks for, or the plain one byte wide,
+     * three address byte read it starts in when the image never asks.
+     */
+    public SpiRead effectiveRead() {
+        return spiRead.orElse(SpiRead.READ);
+    }
+
     /** Whether a configuration watchdog is armed, which is what makes a bad update fall back. */
     public boolean watchdog() {
         return watchdogCycles.isPresent();

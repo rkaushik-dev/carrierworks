@@ -11,7 +11,6 @@ import io.github.rkaushikdev.carrierworks.artifacts.ArtifactRecord;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactStore;
 import io.github.rkaushikdev.carrierworks.bitstream.ConfigOptions;
 import io.github.rkaushikdev.carrierworks.bitstream.Packets;
-import io.github.rkaushikdev.carrierworks.catalog.FlashSpec;
 import io.github.rkaushikdev.carrierworks.flash.EraseUnit;
 import io.github.rkaushikdev.carrierworks.flash.FlashLayout;
 import io.github.rkaushikdev.carrierworks.flash.FlashPlan;
@@ -109,12 +108,6 @@ public final class JobRunner {
         this.wear = wear;
     }
 
-    /** Golden in the bottom half of the part, update in the top half. */
-    public static FlashLayout flashLayout(FlashSpec spec) {
-        long half = spec.capacityBytes() / 2;
-        return FlashLayout.multiboot(spec, half, half, half);
-    }
-
     /** The settings the runner gates and retries by. */
     public BenchSettings settings() {
         return settings;
@@ -196,8 +189,8 @@ public final class JobRunner {
         }
         Function<String, SpiFlashDriver> flashes =
                 drivers.flashes().orElseThrow(() -> new NotFound("flash driver", job.board()));
-        FlashLayout layout = flashLayout(board.flashSpec());
-        String region = job.touchesGolden() ? "golden" : "update";
+        FlashLayout layout = FlashLayout.halves(board.flashSpec());
+        String region = job.mode().region().orElseThrow();
         FlashPlan plan = FlashPlan.forWrite(layout, region, image, EraseUnit.SECTOR, job.verify());
         wear.ifPresent(ledger -> ledger.record(job.board(), plan));
         FlashOutcome written = Flasher.writeImage(

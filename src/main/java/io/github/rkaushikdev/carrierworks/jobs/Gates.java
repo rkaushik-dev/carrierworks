@@ -6,6 +6,8 @@ import io.github.rkaushikdev.carrierworks.bitstream.ConfigOptions;
 import io.github.rkaushikdev.carrierworks.bitstream.SpiRead;
 import io.github.rkaushikdev.carrierworks.catalog.DeviceSpec;
 import io.github.rkaushikdev.carrierworks.catalog.FlashSpec;
+import io.github.rkaushikdev.carrierworks.flash.FlashLayout;
+import io.github.rkaushikdev.carrierworks.flash.FlashRegion;
 import io.github.rkaushikdev.carrierworks.flash.WearLedger;
 import io.github.rkaushikdev.carrierworks.inventory.Board;
 import io.github.rkaushikdev.carrierworks.inventory.BoardState;
@@ -39,7 +41,9 @@ import java.util.stream.Collectors;
  *   <li>A worn flash does not get the golden image. If the part is near the end of its erase life,
  *       the copy that has to survive is not the one to write to it.
  *   <li>An image has to be able to read itself back out of the part it is written to. One built for
- *       a quad read boots from nothing on a part that is not wired for four bit transfers.
+ *       a quad read boots from nothing on a part that is not wired for four bit transfers, and one
+ *       written above sixteen megabytes has to be read with four address bytes or the device never
+ *       finds it.
  * </ul>
  *
  * <p>The blockers are sentences operators read, and {@link GateReport#describe()} puts them in one
@@ -180,10 +184,16 @@ public final class Gates {
             if (job.touchesGolden() && wear.isPresent() && wear.get().isWorn(board.tag(), flash)) {
                 blockers.add("the flash on this board is near the end of its erase life");
             }
-            Optional<SpiRead> read = options.spiRead();
-            if (read.isPresent() && read.get().needsQuad() && !flash.quadCapable()) {
+            SpiRead read = options.effectiveRead();
+            if (read.needsQuad() && !flash.quadCapable()) {
                 blockers.add(
                         "the image reads its flash four bits wide and the " + flash.name() + " on this board cannot");
+            }
+            FlashRegion target =
+                    FlashLayout.halves(flash).region(job.mode().region().orElseThrow());
+            if (!read.reaches(Math.min(target.start() + record.length(), target.end()) - 1)) {
+                blockers.add("the " + target.name() + " region runs past 16 MiB and the image reads with three"
+                        + " address bytes");
             }
             Optional<AdapterUnit> adapter = board.adapter();
             if (adapter.isEmpty()) {

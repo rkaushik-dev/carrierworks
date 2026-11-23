@@ -9,6 +9,7 @@ import io.github.rkaushikdev.carrierworks.artifacts.ArtifactRecord;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactStore;
 import io.github.rkaushikdev.carrierworks.bitstream.Bitstream;
 import io.github.rkaushikdev.carrierworks.bitstream.Images;
+import io.github.rkaushikdev.carrierworks.flash.FlashLayout;
 import io.github.rkaushikdev.carrierworks.flash.WearLedger;
 import io.github.rkaushikdev.carrierworks.inventory.BoardBook;
 import io.github.rkaushikdev.carrierworks.inventory.BoardSetup;
@@ -230,7 +231,7 @@ class RunnerTest {
         RunResult result = bench.run(bench.job(JobMode.FLASH_UPDATE), true);
         assertThat(result.passed()).isTrue();
         assertThat(result.detail()).contains("verified");
-        long start = JobRunner.flashLayout(bench.flash.spec()).region("update").start();
+        long start = FlashLayout.halves(bench.flash.spec()).region("update").start();
         byte[] stored = bench.store.read(bench.record.digest());
         assertThat(bench.flash.read(start, 16)).containsExactly(Arrays.copyOf(stored, 16));
     }

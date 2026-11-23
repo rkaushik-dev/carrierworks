@@ -9,7 +9,6 @@ import io.github.rkaushikdev.carrierworks.flash.FlashPlan;
 import io.github.rkaushikdev.carrierworks.flash.FlashRegion;
 import io.github.rkaushikdev.carrierworks.flash.WearLedger;
 import io.github.rkaushikdev.carrierworks.inventory.Board;
-import io.github.rkaushikdev.carrierworks.jobs.JobRunner;
 import io.github.rkaushikdev.carrierworks.util.Numbers;
 import java.util.Comparator;
 import java.util.List;
@@ -57,7 +56,7 @@ final class FlashCommands {
 
         @Override
         int run(Context context) {
-            FlashLayout layout = JobRunner.flashLayout(board(context, tag).flashSpec());
+            FlashLayout layout = FlashLayout.halves(board(context, tag).flashSpec());
             List<Map<String, Object>> rows = layout.regions().stream()
                     .sorted(Comparator.comparingLong(FlashRegion::start))
                     .map(region -> fields(
@@ -96,7 +95,7 @@ final class FlashCommands {
 
         @Override
         int run(Context context) {
-            FlashLayout layout = JobRunner.flashLayout(board(context, tag).flashSpec());
+            FlashLayout layout = FlashLayout.halves(board(context, tag).flashSpec());
             EraseUnit erase = subsectors ? EraseUnit.SUBSECTOR : EraseUnit.SECTOR;
             FlashPlan plan;
             if (eraseOnly) {

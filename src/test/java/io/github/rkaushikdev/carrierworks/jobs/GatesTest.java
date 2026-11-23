@@ -323,6 +323,81 @@ class GatesTest {
                 .isTrue();
     }
 
+    private static Board bigFlash() {
+        return BoardSetup.kintex("bx-14").flash("n25q256a11").build();
+    }
+
+    @Test
+    void anUpdateAboveSixteenMegabytesNeedsAFourByteRead() {
+        GateReport report = check(job(JobMode.FLASH_UPDATE), bigFlash())
+                .options(reading(SpiRead.QUAD_READ))
+                .report();
+        assertThat(report.blockers())
+                .containsExactly("the update region runs past 16 MiB and the image reads with three address bytes");
+    }
+
+    @Test
+    void anImageThatNeverNamesAReadIsReadWithThreeAddressBytes() {
+        assertThat(ConfigOptions.DEFAULTS.effectiveRead()).isEqualTo(SpiRead.READ);
+        assertThat(check(job(JobMode.FLASH_UPDATE), bigFlash())
+                        .options(ConfigOptions.DEFAULTS)
+                        .report()
+                        .blockers())
+                .containsExactly("the update region runs past 16 MiB and the image reads with three address bytes");
+    }
+
+    @Test
+    void aFourByteReadReachesTheTopOfABigPart() {
+        assertThat(check(job(JobMode.FLASH_UPDATE), bigFlash())
+                        .options(reading(SpiRead.QUAD_READ_4B))
+                        .report()
+                        .allowed())
+                .isTrue();
+    }
+
+    @Test
+    void theGoldenRegionOfABigPartSitsBelowTheLine() {
+        ArtifactRecord golden = record().withChannel("golden");
+        assertThat(check(job(JobMode.FLASH_GOLDEN), bigFlash(), golden, leased())
+                        .options(reading(SpiRead.FAST_READ))
+                        .report()
+                        .allowed())
+                .isTrue();
+    }
+
+    @Test
+    void onlyTheStretchTheImageCoversHasToBeReachable() {
+        Board board = BoardSetup.kintex("bx-14").flash("mt25ql512").build();
+        ArtifactRecord small = record(DEVICE, mib(4), ArtifactKind.FULL).withChannel("golden");
+        assertThat(check(job(JobMode.FLASH_GOLDEN), board, small, leased())
+                        .options(reading(SpiRead.FAST_READ))
+                        .report()
+                        .allowed())
+                .isTrue();
+        ArtifactRecord large = record(DEVICE, mib(20), ArtifactKind.FULL).withChannel("golden");
+        assertThat(check(job(JobMode.FLASH_GOLDEN), board, large, leased())
+                        .options(reading(SpiRead.FAST_READ))
+                        .report()
+                        .blockers())
+                .containsExactly("the golden region runs past 16 MiB and the image reads with three address bytes");
+    }
+
+    @Test
+    void aJtagLoadNeverReadsTheFlash() {
+        assertThat(check(job(), bigFlash())
+                        .options(ConfigOptions.DEFAULTS)
+                        .report()
+                        .allowed())
+                .isTrue();
+    }
+
+    @Test
+    void eachModeKnowsTheRegionItWrites() {
+        assertThat(JobMode.JTAG.region()).isEmpty();
+        assertThat(JobMode.FLASH_UPDATE.region()).contains("update");
+        assertThat(JobMode.FLASH_GOLDEN.region()).contains("golden");
+    }
+
     @Test
     void everyBlockerIsReportedAtOnce() {
         GateReport report = check(

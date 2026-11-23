@@ -86,6 +86,18 @@ public record FlashLayout(FlashSpec part, List<FlashRegion> regions) {
     }
 
     /**
+     * Golden in the bottom half of the part and update in the top half, which is how every board on
+     * this bench is laid out.
+     *
+     * <p>On a thirty two megabyte part that puts the update image exactly at the sixteen megabyte
+     * line, so whatever goes there has to be read with four address bytes.
+     */
+    public static FlashLayout halves(FlashSpec part) {
+        long half = part.capacityBytes() / 2;
+        return multiboot(part, half, half, half);
+    }
+
+    /**
      * A golden image at zero and an update image above it, with one spare sector between them.
      *
      * <p>The spare sector means growing the golden image slightly does not immediately need a new

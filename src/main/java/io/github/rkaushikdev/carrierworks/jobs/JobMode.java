@@ -4,6 +4,7 @@ import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.Ids;
 import io.github.rkaushikdev.carrierworks.ValidationError;
 import java.util.Arrays;
+import java.util.Optional;
 
 /**
  * How a programming job gets its image onto the board.
@@ -38,6 +39,15 @@ public enum JobMode {
     /** The one mode that can leave a board unable to boot at all. */
     public boolean touchesGolden() {
         return this == FLASH_GOLDEN;
+    }
+
+    /** The flash region a write in this mode lands in, or empty for a load over JTAG. */
+    public Optional<String> region() {
+        return switch (this) {
+            case JTAG -> Optional.empty();
+            case FLASH_UPDATE -> Optional.of("update");
+            case FLASH_GOLDEN -> Optional.of("golden");
+        };
     }
 
     /** The mode with this name, however it was written. */

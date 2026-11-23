@@ -5,10 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactStore;
 import io.github.rkaushikdev.carrierworks.bitstream.Images;
+import io.github.rkaushikdev.carrierworks.flash.FlashLayout;
 import io.github.rkaushikdev.carrierworks.flash.FlashPlan;
 import io.github.rkaushikdev.carrierworks.flash.WearLedger;
 import io.github.rkaushikdev.carrierworks.inventory.BoardSetup;
-import io.github.rkaushikdev.carrierworks.jobs.JobRunner;
 import io.github.rkaushikdev.carrierworks.persistence.BenchDatabase;
 import io.github.rkaushikdev.carrierworks.services.Inventory;
 import io.github.rkaushikdev.carrierworks.util.Times;
@@ -194,7 +194,7 @@ class CliFlashTest {
         String stored = stored();
         byte[] image = new ArtifactStore(root.resolve("artifacts")).read(stored);
         FlashPlan direct = FlashPlan.forWrite(
-                JobRunner.flashLayout(BoardSetup.kintex("bx-14").build().flashSpec()), "update", image);
+                FlashLayout.halves(BoardSetup.kintex("bx-14").build().flashSpec()), "update", image);
         JsonNode body =
                 shell.run("--json", "flash", "plan", "bx-14", "--image", stored).json();
         assertThat(body).hasSize(direct.steps().size());

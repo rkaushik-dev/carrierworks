@@ -49,6 +49,18 @@ class LayoutTest {
     }
 
     @Test
+    void theBenchSplitsEveryPartInHalves() {
+        FlashLayout small = FlashLayout.halves(part());
+        assertThat(small.region("golden").start()).isZero();
+        assertThat(small.region("golden").length()).isEqualTo(mib(8));
+        assertThat(small.region("update").start()).isEqualTo(mib(8));
+        assertThat(small.region("update").end()).isEqualTo(mib(16));
+        FlashLayout big = FlashLayout.halves(FlashParts.part("n25q256a11"));
+        assertThat(big.region("update").start()).isEqualTo(mib(16));
+        assertThat(big.free()).isZero();
+    }
+
+    @Test
     void aSingleImageLayoutRoundsUpToWholeSectors() {
         FlashRegion golden = FlashLayout.singleImage(part(), 3_825_788).region("golden");
         assertThat(golden.start()).isZero();
