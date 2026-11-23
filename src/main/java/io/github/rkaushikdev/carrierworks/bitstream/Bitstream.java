@@ -97,6 +97,11 @@ public record Bitstream(BitFile header, List<ConfigPacket> packets, String diges
         return !commands().contains("start");
     }
 
+    /** The configuration options the image sets on the device. */
+    public ConfigOptions options() {
+        return ConfigOptions.read(packets);
+    }
+
     /** An image that can jump to another one carries the {@code iprog} command. */
     public boolean isMultiboot() {
         return commands().contains("iprog");

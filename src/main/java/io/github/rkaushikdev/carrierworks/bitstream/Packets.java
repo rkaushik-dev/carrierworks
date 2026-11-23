@@ -82,7 +82,9 @@ public final class Packets {
             entry(13L, "desync"),
             entry(15L, "iprog"),
             entry(16L, "crcc"),
-            entry(17L, "ltimer")));
+            entry(17L, "ltimer"),
+            entry(18L, "bspi_read"),
+            entry(19L, "fall_edge")));
 
     private static final long MAX_WORD = 0xFFFF_FFFFL;
 
@@ -207,29 +209,28 @@ public final class Packets {
         return List.copyOf(packets);
     }
 
+    /**
+     * Every word written to one register, in stream order.
+     *
+     * <p>A packet too long to keep contributes nothing, which only ever happens to frame data.
+     */
+    public static List<Long> writtenTo(List<ConfigPacket> packets, String register) {
+        return packets.stream()
+                .filter(packet -> packet.isWrite() && packet.registerName().equals(register))
+                .flatMap(packet -> packet.words().stream())
+                .toList();
+    }
+
     /** The idcode the image writes, or nothing if it never writes one. */
     public static Optional<Long> idcodeFrom(List<ConfigPacket> packets) {
-        for (ConfigPacket packet : packets) {
-            if (packet.isWrite()
-                    && packet.registerName().equals("idcode")
-                    && !packet.words().isEmpty()) {
-                return Optional.of(packet.words().getFirst());
-            }
-        }
-        return Optional.empty();
+        return writtenTo(packets, "idcode").stream().findFirst();
     }
 
     /** Every command the image issues, in order, by name or as {@code command-N}. */
     public static List<String> commandNames(List<ConfigPacket> packets) {
-        List<String> found = new ArrayList<>();
-        for (ConfigPacket packet : packets) {
-            if (packet.isWrite() && packet.registerName().equals("cmd")) {
-                for (long word : packet.words()) {
-                    found.add(COMMANDS.getOrDefault(word, "command-" + word));
-                }
-            }
-        }
-        return List.copyOf(found);
+        return writtenTo(packets, "cmd").stream()
+                .map(word -> COMMANDS.getOrDefault(word, "command-" + word))
+                .toList();
     }
 
     private static List<Long> words(byte[] data, int offset, int count) {

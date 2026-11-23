@@ -111,6 +111,7 @@ public final class Images {
         private int frames = 16;
         private boolean start = true;
         private long idcode = KINTEX_IDCODE;
+        private final List<Long> options = new ArrayList<>();
 
         private Image() {}
 
@@ -156,15 +157,35 @@ public final class Images {
             return this;
         }
 
+        /** Switch the flash to this read opcode once the device has read the start of the image. */
+        public Image spiRead(int opcode) {
+            return write(31, opcode);
+        }
+
+        /** Turn the decryptor on, masked the way the tools write it. */
+        public Image encrypted() {
+            write(6, 1L << 6);
+            return write(5, 1L << 6);
+        }
+
+        /** Arm the configuration watchdog with this count. */
+        public Image watchdog(long cycles) {
+            return write(17, (1L << 30) | cycles);
+        }
+
+        /** One more register write ahead of the frames. */
+        public Image write(int register, long word) {
+            options.add(Packets.type1(2, register, 1));
+            options.add(word);
+            return this;
+        }
+
         /** The packet stream inside the image. */
         public byte[] configWords() {
-            List<Long> words = new ArrayList<>(List.of(
-                    0xFFFF_FFFFL,
-                    Packets.SYNC_WORD,
-                    Packets.type1(2, 12, 1),
-                    idcode,
-                    Packets.type1(2, 2, 0),
-                    Packets.type2(2, frames)));
+            List<Long> words =
+                    new ArrayList<>(List.of(0xFFFF_FFFFL, Packets.SYNC_WORD, Packets.type1(2, 12, 1), idcode));
+            words.addAll(options);
+            words.addAll(List.of(Packets.type1(2, 2, 0), Packets.type2(2, frames)));
             for (long word = 0; word < frames; word++) {
                 words.add(word);
             }
