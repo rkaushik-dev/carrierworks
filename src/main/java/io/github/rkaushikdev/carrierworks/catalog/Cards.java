@@ -1,8 +1,19 @@
 package io.github.rkaushikdev.carrierworks.catalog;
 
+import io.github.rkaushikdev.carrierworks.CatalogError;
+import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.Ids;
 import io.github.rkaushikdev.carrierworks.NotFound;
+import io.github.rkaushikdev.carrierworks.util.Json;
+import io.github.rkaushikdev.carrierworks.util.JsonValues;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,81 +30,24 @@ import java.util.Set;
  * <p>The connector rule is the one that catches people. A low pin count FMC card drops into a high
  * pin count carrier and works, because HPC is LPC plus more signals. The reverse does not, and the
  * card looks seated because the mechanical part of the connector is identical. That single
- * asymmetry is why this has a fit rule rather than an equality check.
+ * asymmetry is why this has a fit rule rather than an equality check. An FMC+ carrier extends the
+ * same rule one step further: it takes FMC+ cards with their extra transceiver bank, and HPC and
+ * LPC cards in the same socket.
+ *
+ * <p>The catalogue is data, in {@value #RESOURCE}, because it changes every time somebody buys a
+ * card and nobody should have to read Java to stock one.
  */
 public final class Cards {
 
-    /** Every connector kind the lab has, and what each will physically accept. */
-    public static final Map<String, Set<String>> CONNECTORS = Map.of(
-            "fmc-hpc", Set.of("fmc-hpc", "fmc-lpc"),
-            "fmc-lpc", Set.of("fmc-lpc"),
-            "pmod", Set.of("pmod"),
-            "sfp-cage", Set.of("sfp-cage"),
-            "hdmi", Set.of("hdmi"));
+    /** Where the catalogue is kept, on the class path. */
+    public static final String RESOURCE = "/catalog/cards.json";
 
-    private static final List<CardSpec> CATALOG = List.of(
-            new CardSpec(
-                    "fmc-adc-2ch-16b",
-                    "curtiss",
-                    "fmc-lpc",
-                    Set.of("adc-16bit", "adc-2ch", "external-clock"),
-                    6500,
-                    Optional.of(1800),
-                    0,
-                    "two channel 250 msps capture, needs the external clock fitted",
-                    Set.of()),
-            new CardSpec(
-                    "fmc-adc-4ch-14b",
-                    "curtiss",
-                    "fmc-hpc",
-                    Set.of("adc-14bit", "adc-4ch", "external-clock", "trigger-in"),
-                    9800,
-                    Optional.of(1800),
-                    4,
-                    "",
-                    Set.of()),
-            new CardSpec(
-                    "fmc-dac-2ch-16b",
-                    "curtiss",
-                    "fmc-lpc",
-                    Set.of("dac-16bit", "dac-2ch"),
-                    5200,
-                    Optional.of(1800),
-                    0,
-                    "",
-                    Set.of()),
-            new CardSpec(
-                    "fmc-sfp-quad",
-                    "opsero",
-                    "fmc-hpc",
-                    Set.of("sfp-4port", "ethernet-10g", "gth-lanes"),
-                    4100,
-                    Optional.of(1800),
-                    4,
-                    "",
-                    Set.of()),
-            new CardSpec(
-                    "fmc-ddr4-sodimm",
-                    "opsero",
-                    "fmc-hpc",
-                    Set.of("ddr4-sodimm", "memory-8gb"),
-                    7400,
-                    Optional.of(1200),
-                    0,
-                    "the rail has to come up at 1v2 or the dimm will not train",
-                    Set.of()),
-            new CardSpec("pmod-ad2", "digilent", "pmod", Set.of("i2c-adc", "adc-12bit"), 180),
-            new CardSpec("pmod-rs485", "digilent", "pmod", Set.of("rs485"), 220),
-            new CardSpec(
-                    "sfp-1g-copper",
-                    "finisar",
-                    "sfp-cage",
-                    Set.of("ethernet-1g"),
-                    1100,
-                    Optional.empty(),
-                    1,
-                    "",
-                    Set.of()));
+    private static final Map<?, ?> DOCUMENT = load();
+
+    /** Every connector kind the lab has, and what each will physically accept. */
+    public static final Map<String, Set<String>> CONNECTORS = connectors(DOCUMENT);
+
+    private static final List<CardSpec> CATALOG = cards(DOCUMENT);
 
     /** Every card the lab stocks, by name. */
     public static final CatalogIndex<CardSpec> CARDS = new CatalogIndex<>("card", CATALOG, CardSpec::name);
@@ -130,5 +84,64 @@ public final class Cards {
     /** Every card, in catalog order. */
     public static List<CardSpec> all() {
         return CARDS.all();
+    }
+
+    private static Map<?, ?> load() {
+        try (InputStream in = Cards.class.getResourceAsStream(RESOURCE)) {
+            if (in == null) {
+                throw new CatalogError("the card catalogue is missing", Details.of("resource", RESOURCE));
+            }
+            if (!(Json.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8)) instanceof Map<?, ?> document)) {
+                throw new CatalogError("the card catalogue is not an object", Details.of("resource", RESOURCE));
+            }
+            return document;
+        } catch (IOException failure) {
+            throw new UncheckedIOException(failure);
+        }
+    }
+
+    private static Map<String, Set<String>> connectors(Map<?, ?> document) {
+        Map<String, Set<String>> found = new LinkedHashMap<>();
+        if (document.get("connectors") instanceof Map<?, ?> table) {
+            table.forEach((carrier, accepts) -> found.put(String.valueOf(carrier), Set.copyOf(texts(accepts))));
+        }
+        return Collections.unmodifiableMap(found);
+    }
+
+    /**
+     * One card per entry. A card with no {@code vadj_mv} leaves the adjustable rail alone, and one
+     * with no {@code transceivers} uses none.
+     */
+    static List<CardSpec> cards(Map<?, ?> document) {
+        List<CardSpec> found = new ArrayList<>();
+        if (!(document.get("cards") instanceof List<?> entries)) {
+            throw new CatalogError("the card catalogue lists no cards", Details.of("resource", RESOURCE));
+        }
+        for (Object item : entries) {
+            if (!(item instanceof Map<?, ?> entry)) {
+                throw new CatalogError(
+                        "a card in the catalogue is not an object", Details.of("given", JsonValues.text(item)));
+            }
+            Object vadj = entry.get("vadj_mv");
+            found.add(new CardSpec(
+                    JsonValues.text(entry.get("name")),
+                    JsonValues.text(entry.get("vendor")),
+                    JsonValues.text(entry.get("connector")),
+                    Set.copyOf(texts(entry.get("provides"))),
+                    (int) JsonValues.whole(entry.get("power_draw_mw")),
+                    vadj == null ? Optional.empty() : Optional.of((int) JsonValues.whole(vadj)),
+                    (int) JsonValues.whole(JsonValues.get(entry, "transceivers", 0L)),
+                    JsonValues.text(JsonValues.get(entry, "notes", "")),
+                    Set.copyOf(texts(JsonValues.get(entry, "tags", List.of())))));
+        }
+        return List.copyOf(found);
+    }
+
+    private static List<String> texts(Object value) {
+        if (!(value instanceof List<?> items)) {
+            throw new CatalogError(
+                    "a list was expected in the card catalogue", Details.of("given", JsonValues.text(value)));
+        }
+        return items.stream().map(JsonValues::text).toList();
     }
 }

@@ -61,6 +61,16 @@ class BoardsTest {
     }
 
     @Test
+    void anFmcPlusSlotTakesAnFmcPlusCardAndItsLanes() {
+        Board live = board(b -> b.slots(
+                new BoardSlot("fmc0", "fmc-plus", "fmcp-adc-8ch-12b"),
+                new BoardSlot("fmc1", "fmc-plus", "fmc-sfp-quad")));
+        assertThat(live.transceiversFree()).isEqualTo(4);
+        assertThatThrownBy(() -> new BoardSlot("fmc0", "fmc-hpc", "fmcp-adc-8ch-12b"))
+                .isInstanceOf(ConfigurationError.class);
+    }
+
+    @Test
     void aSlotNobodyNamedIsANotFound() {
         assertThatThrownBy(() -> board().slot("fmc9")).isInstanceOf(NotFound.class);
     }

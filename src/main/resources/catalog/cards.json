@@ -1,0 +1,96 @@
+{
+  "connectors": {
+    "fmc-plus": ["fmc-plus", "fmc-hpc", "fmc-lpc"],
+    "fmc-hpc": ["fmc-hpc", "fmc-lpc"],
+    "fmc-lpc": ["fmc-lpc"],
+    "pmod": ["pmod"],
+    "sfp-cage": ["sfp-cage"],
+    "hdmi": ["hdmi"]
+  },
+  "cards": [
+    {
+      "name": "fmc-adc-2ch-16b",
+      "vendor": "curtiss",
+      "connector": "fmc-lpc",
+      "provides": ["adc-16bit", "adc-2ch", "external-clock"],
+      "power_draw_mw": 6500,
+      "vadj_mv": 1800,
+      "notes": "two channel 250 msps capture, needs the external clock fitted"
+    },
+    {
+      "name": "fmc-adc-4ch-14b",
+      "vendor": "curtiss",
+      "connector": "fmc-hpc",
+      "provides": ["adc-14bit", "adc-4ch", "external-clock", "trigger-in"],
+      "power_draw_mw": 9800,
+      "vadj_mv": 1800,
+      "transceivers": 4
+    },
+    {
+      "name": "fmc-dac-2ch-16b",
+      "vendor": "curtiss",
+      "connector": "fmc-lpc",
+      "provides": ["dac-16bit", "dac-2ch"],
+      "power_draw_mw": 5200,
+      "vadj_mv": 1800
+    },
+    {
+      "name": "fmc-sfp-quad",
+      "vendor": "opsero",
+      "connector": "fmc-hpc",
+      "provides": ["sfp-4port", "ethernet-10g", "gth-lanes"],
+      "power_draw_mw": 4100,
+      "vadj_mv": 1800,
+      "transceivers": 4
+    },
+    {
+      "name": "fmc-ddr4-sodimm",
+      "vendor": "opsero",
+      "connector": "fmc-hpc",
+      "provides": ["ddr4-sodimm", "memory-8gb"],
+      "power_draw_mw": 7400,
+      "vadj_mv": 1200,
+      "notes": "the rail has to come up at 1v2 or the dimm will not train"
+    },
+    {
+      "name": "fmcp-adc-8ch-12b",
+      "vendor": "curtiss",
+      "connector": "fmc-plus",
+      "provides": ["adc-8ch", "jesd204b"],
+      "power_draw_mw": 14500,
+      "vadj_mv": 1800,
+      "transceivers": 8,
+      "notes": "eight jesd204b lanes, so it wants the fmc+ second bank of transceivers"
+    },
+    {
+      "name": "fmc-xm105",
+      "vendor": "xilinx",
+      "connector": "fmc-hpc",
+      "provides": ["debug-header", "gpio"],
+      "power_draw_mw": 300,
+      "notes": "passive breakout, runs at whatever the carrier puts on vadj"
+    },
+    {
+      "name": "pmod-ad2",
+      "vendor": "digilent",
+      "connector": "pmod",
+      "provides": ["i2c-adc", "adc-12bit"],
+      "power_draw_mw": 180
+    },
+    {
+      "name": "pmod-rs485",
+      "vendor": "digilent",
+      "connector": "pmod",
+      "provides": ["rs485"],
+      "power_draw_mw": 220
+    },
+    {
+      "name": "sfp-1g-copper",
+      "vendor": "finisar",
+      "connector": "sfp-cage",
+      "provides": ["ethernet-1g"],
+      "power_draw_mw": 1100,
+      "transceivers": 1
+    }
+  ]
+}
