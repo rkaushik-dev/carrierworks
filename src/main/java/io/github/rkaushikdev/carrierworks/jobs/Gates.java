@@ -16,6 +16,7 @@ import io.github.rkaushikdev.carrierworks.jtag.AdapterUnit;
 import io.github.rkaushikdev.carrierworks.leases.Lease;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -44,6 +45,8 @@ import java.util.stream.Collectors;
  *       a quad read boots from nothing on a part that is not wired for four bit transfers, and one
  *       written above sixteen megabytes has to be read with four address bytes or the device never
  *       finds it.
+ *   <li>A golden image that jumps has to land on the update image. A jump anywhere else boots a
+ *       stale image, or nothing, and the board looks as if the update failed.
  * </ul>
  *
  * <p>The blockers are sentences operators read, and {@link GateReport#describe()} puts them in one
@@ -189,8 +192,9 @@ public final class Gates {
                 blockers.add(
                         "the image reads its flash four bits wide and the " + flash.name() + " on this board cannot");
             }
-            FlashRegion target =
-                    FlashLayout.halves(flash).region(job.mode().region().orElseThrow());
+            FlashLayout layout = FlashLayout.halves(flash);
+            FlashRegion target = layout.region(job.mode().region().orElseThrow());
+            blockers.addAll(jumpBlockers(layout));
             if (!read.reaches(Math.min(target.start() + record.length(), target.end()) - 1)) {
                 blockers.add("the " + target.name() + " region runs past 16 MiB and the image reads with three"
                         + " address bytes");
@@ -202,6 +206,30 @@ public final class Gates {
                 blockers.add("the " + adapter.get().model() + " on this board cannot write flash");
             }
             return blockers;
+        }
+
+        /**
+         * A golden image that jumps has to jump to the update image, and an update image must not
+         * jump at all: it would restart configuration from wherever it points every time it loaded.
+         */
+        private List<String> jumpBlockers(FlashLayout layout) {
+            if (options.jumpsTo().isEmpty()) {
+                return List.of();
+            }
+            long jump = options.jumpsTo().getAsLong();
+            long update = layout.region("update").start();
+            if (!job.touchesGolden()) {
+                return List.of(String.format(
+                        Locale.ROOT, "an update image that jumps to 0x%08x would never stay loaded", jump));
+            }
+            if (jump != update) {
+                return List.of(String.format(
+                        Locale.ROOT,
+                        "the golden image jumps to 0x%08x and the update image starts at 0x%08x",
+                        jump,
+                        update));
+            }
+            return List.of();
         }
 
         private List<String> leaseBlockers() {

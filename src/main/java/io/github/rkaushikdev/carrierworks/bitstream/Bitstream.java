@@ -119,7 +119,7 @@ public record Bitstream(BitFile header, List<ConfigPacket> packets, String diges
 
     /** An image that can jump to another one carries the {@code iprog} command. */
     public boolean isMultiboot() {
-        return commands().contains("iprog");
+        return options().jumpsTo().isPresent();
     }
 
     /** The first twelve digits of the digest, which is how people quote an image. */

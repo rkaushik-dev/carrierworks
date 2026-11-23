@@ -25,18 +25,33 @@ import java.util.OptionalLong;
  * @param encrypted whether the image turns the decryptor on
  * @param compressed whether the image writes frames through the multiple frame register
  * @param watchdogCycles the configuration watchdog's count, or empty when it is not armed
+ * @param jumpsTo the flash address the image sends the device to with {@code iprog}, or empty when
+ *     it never jumps
  */
 public record ConfigOptions(
-        Optional<SpiRead> spiRead, boolean encrypted, boolean compressed, OptionalLong watchdogCycles) {
+        Optional<SpiRead> spiRead,
+        boolean encrypted,
+        boolean compressed,
+        OptionalLong watchdogCycles,
+        OptionalLong jumpsTo) {
 
     /** What an image that sets nothing leaves the device at. */
     public static final ConfigOptions DEFAULTS =
-            new ConfigOptions(Optional.empty(), false, false, OptionalLong.empty());
+            new ConfigOptions(Optional.empty(), false, false, OptionalLong.empty(), OptionalLong.empty());
+
+    /** An image that sets these and never jumps anywhere. */
+    public ConfigOptions(
+            Optional<SpiRead> spiRead, boolean encrypted, boolean compressed, OptionalLong watchdogCycles) {
+        this(spiRead, encrypted, compressed, watchdogCycles, OptionalLong.empty());
+    }
 
     private static final long DECRYPT_BIT = 1L << 6;
     private static final long WATCHDOG_ON_CONFIG = 1L << 30;
     private static final long WATCHDOG_COUNT = 0x3FFF_FFFFL;
     private static final long ALL_BITS = 0xFFFF_FFFFL;
+    // The warm boot register's address field; the two bits above it pick the revision pins.
+    private static final long WARM_BOOT_ADDRESS = 0x1FFF_FFFFL;
+    private static final long IPROG = 15;
 
     /** Read the options out of the configuration data a store keeps. */
     public static ConfigOptions of(byte[] configData) {
@@ -49,6 +64,8 @@ public record ConfigOptions(
         boolean encrypted = false;
         boolean compressed = false;
         OptionalLong watchdog = OptionalLong.empty();
+        OptionalLong warmBoot = OptionalLong.empty();
+        boolean jumps = false;
         long mask = ALL_BITS;
         for (ConfigPacket packet : packets) {
             if (!packet.isWrite() || packet.words().isEmpty()) {
@@ -60,6 +77,8 @@ public record ConfigOptions(
                 case "ctl0" -> encrypted = (word & mask & DECRYPT_BIT) != 0;
                 case "mfwr" -> compressed = true;
                 case "bspi" -> spiRead = Optional.of(SpiRead.of((int) (word & 0xFF)));
+                case "wbstar" -> warmBoot = OptionalLong.of(word & WARM_BOOT_ADDRESS);
+                case "cmd" -> jumps |= packet.words().contains(IPROG);
                 case "timer" ->
                     watchdog = (word & WATCHDOG_ON_CONFIG) != 0 && (word & WATCHDOG_COUNT) != 0
                             ? OptionalLong.of(word & WATCHDOG_COUNT)
@@ -67,7 +86,9 @@ public record ConfigOptions(
                 default -> {}
             }
         }
-        return new ConfigOptions(spiRead, encrypted, compressed, watchdog);
+        // A jump with no warm boot address written goes back to zero, which is the golden image.
+        OptionalLong target = jumps ? OptionalLong.of(warmBoot.orElse(0)) : OptionalLong.empty();
+        return new ConfigOptions(spiRead, encrypted, compressed, watchdog, target);
     }
 
     /**
@@ -99,6 +120,7 @@ public record ConfigOptions(
             parts.add("compressed");
         }
         watchdogCycles.ifPresent(cycles -> parts.add(String.format(Locale.ROOT, "watchdog 0x%08x", cycles)));
+        jumpsTo.ifPresent(address -> parts.add(String.format(Locale.ROOT, "jumps to 0x%08x", address)));
         return parts.isEmpty() ? "defaults" : String.join(", ", parts);
     }
 }

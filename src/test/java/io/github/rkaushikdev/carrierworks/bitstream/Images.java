@@ -112,6 +112,7 @@ public final class Images {
         private boolean start = true;
         private long idcode = KINTEX_IDCODE;
         private final List<Long> options = new ArrayList<>();
+        private final List<Long> trailer = new ArrayList<>();
 
         private Image() {}
 
@@ -173,6 +174,24 @@ public final class Images {
             return write(17, (1L << 30) | cycles);
         }
 
+        /** Issue a command ahead of the frames. */
+        public Image command(long code) {
+            return write(4, code);
+        }
+
+        /** Send the device to another flash address ahead of the frames, the way a golden image does. */
+        public Image iprog(long address) {
+            write(16, address);
+            return command(15);
+        }
+
+        /** End the stream with a desync, after the start command, the way the tools do. */
+        public Image desync() {
+            trailer.add(Packets.type1(2, 4, 1));
+            trailer.add(13L);
+            return this;
+        }
+
         /** One more register write ahead of the frames. */
         public Image write(int register, long word) {
             options.add(Packets.type1(2, register, 1));
@@ -193,6 +212,7 @@ public final class Images {
                 words.add(Packets.type1(2, 4, 1));
                 words.add(5L);
             }
+            words.addAll(trailer);
             return Packets.wordsToBytes(words);
         }
 

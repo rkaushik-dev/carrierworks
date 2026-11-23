@@ -135,6 +135,34 @@ class ConfigOptionsTest {
     }
 
     @Test
+    void aGoldenImageSaysWhereItJumps() {
+        ConfigOptions options = Images.image().iprog(0x80_0000).bitstream().options();
+        assertThat(options.jumpsTo()).hasValue(0x80_0000);
+        assertThat(options.describe()).isEqualTo("jumps to 0x00800000");
+    }
+
+    @Test
+    void theRevisionSelectBitsAreNotPartOfTheAddress() {
+        ConfigOptions options =
+                Images.image().write(16, 0x6080_0000L).command(15).bitstream().options();
+        assertThat(options.jumpsTo()).hasValue(0x80_0000);
+    }
+
+    @Test
+    void aWarmBootAddressWithNoJumpIsNotAJump() {
+        Bitstream image = Images.image().write(16, 0x80_0000).bitstream();
+        assertThat(image.options().jumpsTo()).isEmpty();
+        assertThat(image.isMultiboot()).isFalse();
+    }
+
+    @Test
+    void aJumpWithNoAddressGoesBackToZero() {
+        Bitstream image = Images.image().command(15).bitstream();
+        assertThat(image.options().jumpsTo()).hasValue(0);
+        assertThat(image.isMultiboot()).isTrue();
+    }
+
+    @Test
     void theSpiReadCommandHasAName() {
         Bitstream image = Images.image().write(4, 18).bitstream();
         assertThat(image.commands()).containsExactly("bspi_read", "start");

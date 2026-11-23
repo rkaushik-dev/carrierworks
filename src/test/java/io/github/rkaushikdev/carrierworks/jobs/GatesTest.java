@@ -391,6 +391,44 @@ class GatesTest {
                 .isTrue();
     }
 
+    private static ConfigOptions jumpingTo(long address) {
+        return new ConfigOptions(Optional.empty(), false, false, OptionalLong.empty(), OptionalLong.of(address));
+    }
+
+    @Test
+    void aGoldenImageThatJumpsToTheUpdateImageIsAllowed() {
+        ArtifactRecord golden = record().withChannel("golden");
+        assertThat(check(job(JobMode.FLASH_GOLDEN), board(), golden, leased())
+                        .options(jumpingTo(mib(8)))
+                        .report()
+                        .allowed())
+                .isTrue();
+    }
+
+    @Test
+    void aGoldenImageThatJumpsSomewhereElseIsRefused() {
+        ArtifactRecord golden = record().withChannel("golden");
+        assertThat(check(job(JobMode.FLASH_GOLDEN), board(), golden, leased())
+                        .options(jumpingTo(0x40_0000))
+                        .report()
+                        .blockers())
+                .containsExactly("the golden image jumps to 0x00400000 and the update image starts at 0x00800000");
+    }
+
+    @Test
+    void anUpdateImageThatJumpsIsRefusedWhereverItPoints() {
+        assertThat(check(job(JobMode.FLASH_UPDATE))
+                        .options(jumpingTo(mib(8)))
+                        .report()
+                        .blockers())
+                .containsExactly("an update image that jumps to 0x00800000 would never stay loaded");
+    }
+
+    @Test
+    void aJumpingImageCanStillBeLoadedOverJtag() {
+        assertThat(check().options(jumpingTo(0)).report().allowed()).isTrue();
+    }
+
     @Test
     void eachModeKnowsTheRegionItWrites() {
         assertThat(JobMode.JTAG.region()).isEmpty();
