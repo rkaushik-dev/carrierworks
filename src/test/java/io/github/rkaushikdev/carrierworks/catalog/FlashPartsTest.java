@@ -129,6 +129,16 @@ class FlashPartsTest {
     }
 
     @Test
+    void theBigSpansionPartIsStocked() {
+        FlashSpec part = FlashParts.forJedecId(0x010219);
+        assertThat(part.name()).isEqualTo("s25fl256s");
+        assertThat(part.addressBytes()).isEqualTo(4);
+        assertThat(part.quadCapable()).isTrue();
+        assertThat(part.eraseCycles()).isEqualTo(FlashSpec.DEFAULT_ERASE_CYCLES);
+        assertThat(FlashParts.all()).hasSameSizeAs(CatalogFile.parts("flash"));
+    }
+
+    @Test
     void jedecIdsAreUnique() {
         List<Integer> ids = FlashParts.all().stream().map(FlashSpec::jedecId).toList();
         assertThat(new HashSet<>(ids)).hasSameSizeAs(ids);

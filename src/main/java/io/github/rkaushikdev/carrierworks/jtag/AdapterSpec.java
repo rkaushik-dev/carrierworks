@@ -46,11 +46,6 @@ public record AdapterSpec(
         }
     }
 
-    /** A single channel, buffered cable that can program flash. */
-    public AdapterSpec(String model, String vendor, int maxClockHz, List<Integer> voltagesMv) {
-        this(model, vendor, maxClockHz, voltagesMv, 1, true, true);
-    }
-
     /** The clock on the box. */
     public Frequency maxClock() {
         return new Frequency(maxClockHz);

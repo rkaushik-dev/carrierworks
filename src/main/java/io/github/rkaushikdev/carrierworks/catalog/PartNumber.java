@@ -4,11 +4,13 @@ import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.JunctionRange;
 import io.github.rkaushikdev.carrierworks.Requirement;
 import io.github.rkaushikdev.carrierworks.ValidationError;
+import io.github.rkaushikdev.carrierworks.util.JsonValues;
 import io.github.rkaushikdev.carrierworks.util.Repr;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * One ordering code, held apart at the seams.
@@ -36,12 +38,11 @@ public record PartNumber(String device, String speedGrade, String packageCode, S
      * Junction temperature range in celsius for each ordering code suffix. These are the datasheet
      * numbers, and the thermal supervisor reads them rather than carrying a threshold of its own.
      */
-    public static final Map<String, JunctionRange> TEMPERATURE_RANGES = Map.of(
-            "c", new JunctionRange(0, 85),
-            "i", new JunctionRange(-40, 100),
-            "e", new JunctionRange(0, 100),
-            "q", new JunctionRange(-40, 125),
-            "m", new JunctionRange(-55, 125));
+    public static final Map<String, JunctionRange> TEMPERATURE_RANGES = CatalogFile.parts("temperature_grades").stream()
+            .collect(Collectors.toUnmodifiableMap(
+                    entry -> JsonValues.text(entry.get("grade")),
+                    entry -> new JunctionRange(
+                            CatalogFile.whole(entry, "low", 0), CatalogFile.whole(entry, "high", 0))));
 
     private static final Pattern DEVICE = Pattern.compile(
             "xc(?:7(?<seven>[akvsz])(?<sevenSize>\\d+[a-z]*)|6s(?<six>lx|vlx)(?<sixSize>\\d+t?)|(?<ultra>ku|vu|zu|au)(?<ultraSize>\\d+[a-z]*))");

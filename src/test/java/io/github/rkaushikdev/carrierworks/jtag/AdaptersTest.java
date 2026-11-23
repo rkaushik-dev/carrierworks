@@ -149,6 +149,18 @@ class AdaptersTest {
     }
 
     @Test
+    void theCablesComeOutOfThePartsFileWithTheUsualDefaults() {
+        AdapterSpec hs1 = Adapters.model("JTAG-HS1");
+        assertThat(hs1.voltagesMv()).containsExactly(1800, 2500, 3300, 5000);
+        assertThat(hs1.channels()).isEqualTo(1);
+        assertThat(hs1.buffered()).isTrue();
+        assertThat(hs1.canProgramFlash()).isTrue();
+        AdapterSpec mini = Adapters.model("ft2232h-mini");
+        assertThat(mini.channels()).isEqualTo(2);
+        assertThat(mini.buffered()).isFalse();
+    }
+
+    @Test
     void oneModelInTheCatalogCannotDoFlash() {
         assertThat(Adapters.model("arm-usb-tiny-h").canProgramFlash()).isFalse();
         assertThat(hs2().canProgramFlash()).isTrue();

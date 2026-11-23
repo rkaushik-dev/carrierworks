@@ -1,27 +1,32 @@
 package io.github.rkaushikdev.carrierworks.catalog;
 
+import io.github.rkaushikdev.carrierworks.util.JsonValues;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
-/** The configuration flash parts the boards carry. */
+/** The configuration flash parts the boards carry, as the parts file lists them. */
 public final class FlashParts {
 
     private static final long MIB = 1024L * 1024;
 
-    private static final List<FlashSpec> CATALOG = List.of(
-            new FlashSpec("n25q128a13", "micron", 0x20BA18, 16 * MIB, 256, 4096, 65536, 500, 300, 700, 250),
-            new FlashSpec("n25q256a11", "micron", 0x20BB19, 32 * MIB, 256, 4096, 65536, 500, 300, 700, 480),
-            new FlashSpec("mt25ql512", "micron", 0x20BA20, 64 * MIB, 256, 4096, 65536, 400, 400, 1000, 600),
-            new FlashSpec("mx25l25635f", "macronix", 0xC22019, 32 * MIB, 256, 4096, 65536, 750, 250, 900, 300),
-            new FlashSpec("s25fl128s", "spansion", 0x012018, 16 * MIB, 256, 4096, 65536, 600, 290, 520, 165),
-            new FlashSpec(
-                    "w25q64jv", "winbond", 0xEF4017, 8 * MIB, 256, 4096, 65536, 700, 120, 1000, 100, true, 100_000),
-            // The older carriers' part: one bit wide only, and nothing smaller than a sector to erase.
-            new FlashSpec(
-                    "m25p128", "micron", 0x202018, 16 * MIB, 256, 262144, 262144, 800, 2000, 2000, 105, false,
-                    100_000));
+    private static final List<FlashSpec> CATALOG = CatalogFile.parts("flash").stream()
+            .map(entry -> new FlashSpec(
+                    JsonValues.text(entry.get("name")),
+                    JsonValues.text(entry.get("vendor")),
+                    Math.toIntExact(CatalogFile.hex(entry, "jedec_id")),
+                    CatalogFile.whole(entry, "capacity_mib", 0) * MIB,
+                    CatalogFile.whole(entry, "page_bytes", 0),
+                    CatalogFile.whole(entry, "subsector_bytes", 0),
+                    CatalogFile.whole(entry, "sector_bytes", 0),
+                    CatalogFile.whole(entry, "page_program_us", 0),
+                    CatalogFile.whole(entry, "subsector_erase_ms", 0),
+                    CatalogFile.whole(entry, "sector_erase_ms", 0),
+                    CatalogFile.whole(entry, "bulk_erase_s", 0),
+                    CatalogFile.flag(entry, "quad", true),
+                    CatalogFile.whole(entry, "erase_cycles", FlashSpec.DEFAULT_ERASE_CYCLES)))
+            .toList();
 
     /** Every part the lab stocks, by name and by JEDEC id. */
     public static final CatalogIndex<FlashSpec> FLASH_PARTS =

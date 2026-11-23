@@ -4,7 +4,9 @@ import io.github.rkaushikdev.carrierworks.Details;
 import io.github.rkaushikdev.carrierworks.Frequency;
 import io.github.rkaushikdev.carrierworks.Ids;
 import io.github.rkaushikdev.carrierworks.ValidationError;
+import io.github.rkaushikdev.carrierworks.catalog.CatalogFile;
 import io.github.rkaushikdev.carrierworks.catalog.CatalogIndex;
+import io.github.rkaushikdev.carrierworks.util.JsonValues;
 import java.util.List;
 
 /**
@@ -23,13 +25,16 @@ public final class Adapters {
     private static final long DERATE_PERCENT_PER_DEVICE = 20;
     private static final long CLOCK_FLOOR_HZ = 1_000_000;
 
-    private static final List<AdapterSpec> CATALOG = List.of(
-            new AdapterSpec("jtag-hs2", "digilent", 30_000_000, List.of(1800, 2500, 3300, 5000)),
-            new AdapterSpec("jtag-hs3", "digilent", 30_000_000, List.of(1800, 2500, 3300)),
-            new AdapterSpec("jtag-smt2", "digilent", 30_000_000, List.of(1800, 2500, 3300)),
-            new AdapterSpec("platform-cable-ii", "xilinx", 24_000_000, List.of(1500, 1800, 2500, 3300)),
-            new AdapterSpec("ft2232h-mini", "ftdi", 30_000_000, List.of(3300), 2, false, true),
-            new AdapterSpec("arm-usb-tiny-h", "olimex", 30_000_000, List.of(1800, 2500, 3300), 1, true, false));
+    private static final List<AdapterSpec> CATALOG = CatalogFile.parts("adapters").stream()
+            .map(entry -> new AdapterSpec(
+                    JsonValues.text(entry.get("model")),
+                    JsonValues.text(entry.get("vendor")),
+                    CatalogFile.whole(entry, "max_clock_hz", 0),
+                    CatalogFile.wholes(entry, "voltages_mv"),
+                    CatalogFile.whole(entry, "channels", 1),
+                    CatalogFile.flag(entry, "buffered", true),
+                    CatalogFile.flag(entry, "can_program_flash", true)))
+            .toList();
 
     /** Every cable model the lab stocks, by model. */
     public static final CatalogIndex<AdapterSpec> ADAPTERS =

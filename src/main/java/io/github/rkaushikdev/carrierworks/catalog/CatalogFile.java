@@ -21,6 +21,9 @@ import java.util.Map;
  */
 public final class CatalogFile {
 
+    /** The parts the lab stocks: devices, configuration flash and programming cables. */
+    public static final String PARTS = "/catalog/parts.json";
+
     /** The carrier models: what each puts on the JTAG header and which rails it brings up. */
     public static final String CARRIERS = "/catalog/carriers.json";
 
@@ -72,9 +75,39 @@ public final class CatalogFile {
         return items.stream().map(JsonValues::text).toList();
     }
 
+    /** The whole numbers of a list member; none when the member is absent. */
+    public static List<Integer> wholes(Map<?, ?> owner, String member) {
+        Object value = JsonValues.get(owner, member, List.of());
+        if (!(value instanceof List<?> items)) {
+            throw new CatalogError("a list was expected in the catalogue", Details.of("member", member));
+        }
+        return items.stream()
+                .map(item -> Math.toIntExact(JsonValues.whole(item)))
+                .toList();
+    }
+
     /** A whole number member, or the fallback when it is absent. */
     public static int whole(Map<?, ?> owner, String member, int fallback) {
         return Math.toIntExact(JsonValues.whole(JsonValues.get(owner, member, (long) fallback)));
+    }
+
+    /** A flag member, or the fallback when it is absent. */
+    public static boolean flag(Map<?, ?> owner, String member, boolean fallback) {
+        Object value = JsonValues.get(owner, member, fallback);
+        if (!(value instanceof Boolean set)) {
+            throw new CatalogError("a flag was expected in the catalogue", Details.of("member", member));
+        }
+        return set;
+    }
+
+    /** A hex member, such as an idcode or a JEDEC id, read as a number. */
+    public static long hex(Map<?, ?> owner, String member) {
+        return IdCode.parse(JsonValues.text(owner.get(member))).value();
+    }
+
+    /** One section of the parts file. */
+    public static List<Map<?, ?>> parts(String section) {
+        return objects(load(PARTS), section);
     }
 
     /** Every carrier model in the carrier file, by model. */

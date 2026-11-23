@@ -88,6 +88,13 @@ class PartNumberTest {
     }
 
     @Test
+    void everyTemperatureGradeInThePartsFileIsReadable() {
+        assertThat(PartNumber.TEMPERATURE_RANGES).containsOnlyKeys("c", "e", "i", "q", "m");
+        assertThat(PartNumber.parse("XC7K325T-2FFG900Q").junctionRange()).isEqualTo(new JunctionRange(-40, 125));
+        assertThat(PartNumber.parse("XC7K325T-2FFG900M").junctionRange().low()).isEqualTo(-55);
+    }
+
+    @Test
     void junctionRangeComesFromTheTemperatureGrade() {
         assertThat(PartNumber.parse("XC7A100T-2FGG484I").junctionRange()).isEqualTo(new JunctionRange(-40, 100));
         assertThat(PartNumber.parse("XC7A100T-2FGG484C").junctionRange()).isEqualTo(new JunctionRange(0, 85));

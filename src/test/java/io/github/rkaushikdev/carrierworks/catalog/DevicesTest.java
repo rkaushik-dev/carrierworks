@@ -102,6 +102,22 @@ class DevicesTest {
     }
 
     @Test
+    void theSmallZynqIsStocked() {
+        DeviceSpec spec = Devices.deviceFor("xc7z010");
+        assertThat(spec.family()).isEqualTo("zynq7000");
+        assertThat(spec.luts()).isEqualTo(17_600);
+        assertThat(spec.configBytes()).isEqualTo(2_083_740);
+        assertThat(Devices.forIdcode(0x13722093L)).isSameAs(spec);
+        assertThat(Devices.inFamily("zynq7000")).extracting(DeviceSpec::device).containsExactly("xc7z010", "xc7z020");
+    }
+
+    @Test
+    void theDevicesComeOutOfThePartsFile() {
+        assertThat(CatalogFile.parts("devices")).hasSameSizeAs(Devices.all());
+        assertThat(Devices.all().getFirst().device()).isEqualTo("xc7s25");
+    }
+
+    @Test
     void idcodesAreUniqueOnceMasked() {
         List<Long> masked = Devices.all().stream()
                 .map(spec -> spec.idcode() & Devices.IDCODE_MASK)

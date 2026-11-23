@@ -1,0 +1,42 @@
+{
+  "temperature_grades": [
+    {"grade": "c", "low": 0, "high": 85},
+    {"grade": "e", "low": 0, "high": 100},
+    {"grade": "i", "low": -40, "high": 100},
+    {"grade": "q", "low": -40, "high": 125},
+    {"grade": "m", "low": -55, "high": 125}
+  ],
+  "devices": [
+    {"device": "xc7s25", "family": "spartan7", "idcode": "0x037c4093", "ir_length": 6, "luts": 14600, "flip_flops": 29200, "block_ram_36k": 45, "dsp": 80, "config_bits": 9935552, "transceivers": 0},
+    {"device": "xc7s50", "family": "spartan7", "idcode": "0x0362f093", "ir_length": 6, "luts": 32600, "flip_flops": 65200, "block_ram_36k": 75, "dsp": 120, "config_bits": 17536096, "transceivers": 0},
+    {"device": "xc7a35t", "family": "artix7", "idcode": "0x0362d093", "ir_length": 6, "luts": 20800, "flip_flops": 41600, "block_ram_36k": 50, "dsp": 90, "config_bits": 17536096, "transceivers": 4},
+    {"device": "xc7a50t", "family": "artix7", "idcode": "0x0362c093", "ir_length": 6, "luts": 32600, "flip_flops": 65200, "block_ram_36k": 75, "dsp": 120, "config_bits": 17536096, "transceivers": 4},
+    {"device": "xc7a100t", "family": "artix7", "idcode": "0x03631093", "ir_length": 6, "luts": 63400, "flip_flops": 126800, "block_ram_36k": 135, "dsp": 240, "config_bits": 30606304, "transceivers": 4},
+    {"device": "xc7a200t", "family": "artix7", "idcode": "0x03636093", "ir_length": 6, "luts": 134600, "flip_flops": 269200, "block_ram_36k": 365, "dsp": 740, "config_bits": 77845216, "transceivers": 8},
+    {"device": "xc7k70t", "family": "kintex7", "idcode": "0x03647093", "ir_length": 6, "luts": 41000, "flip_flops": 82000, "block_ram_36k": 135, "dsp": 240, "config_bits": 24090592, "transceivers": 8},
+    {"device": "xc7k325t", "family": "kintex7", "idcode": "0x03651093", "ir_length": 6, "luts": 203800, "flip_flops": 407600, "block_ram_36k": 445, "dsp": 840, "config_bits": 91548896, "transceivers": 16},
+    {"device": "xc7k410t", "family": "kintex7", "idcode": "0x03656093", "ir_length": 6, "luts": 254200, "flip_flops": 508400, "block_ram_36k": 795, "dsp": 1540, "config_bits": 127023328, "transceivers": 16},
+    {"device": "xc7z010", "family": "zynq7000", "idcode": "0x03722093", "ir_length": 6, "luts": 17600, "flip_flops": 35200, "block_ram_36k": 60, "dsp": 80, "config_bits": 16669920, "transceivers": 0},
+    {"device": "xc7z020", "family": "zynq7000", "idcode": "0x03727093", "ir_length": 6, "luts": 53200, "flip_flops": 106400, "block_ram_36k": 140, "dsp": 220, "config_bits": 32364512, "transceivers": 0},
+    {"device": "xcku040", "family": "kintex_ultrascale", "idcode": "0x03822093", "ir_length": 6, "luts": 242400, "flip_flops": 484800, "block_ram_36k": 600, "dsp": 1920, "config_bits": 126411296, "transceivers": 20}
+  ],
+  "flash": [
+    {"name": "n25q128a13", "vendor": "micron", "jedec_id": "0x20ba18", "capacity_mib": 16, "page_bytes": 256, "subsector_bytes": 4096, "sector_bytes": 65536, "page_program_us": 500, "subsector_erase_ms": 300, "sector_erase_ms": 700, "bulk_erase_s": 250},
+    {"name": "n25q256a11", "vendor": "micron", "jedec_id": "0x20bb19", "capacity_mib": 32, "page_bytes": 256, "subsector_bytes": 4096, "sector_bytes": 65536, "page_program_us": 500, "subsector_erase_ms": 300, "sector_erase_ms": 700, "bulk_erase_s": 480},
+    {"name": "mt25ql512", "vendor": "micron", "jedec_id": "0x20ba20", "capacity_mib": 64, "page_bytes": 256, "subsector_bytes": 4096, "sector_bytes": 65536, "page_program_us": 400, "subsector_erase_ms": 400, "sector_erase_ms": 1000, "bulk_erase_s": 600},
+    {"name": "mx25l25635f", "vendor": "macronix", "jedec_id": "0xc22019", "capacity_mib": 32, "page_bytes": 256, "subsector_bytes": 4096, "sector_bytes": 65536, "page_program_us": 750, "subsector_erase_ms": 250, "sector_erase_ms": 900, "bulk_erase_s": 300},
+    {"name": "s25fl128s", "vendor": "spansion", "jedec_id": "0x012018", "capacity_mib": 16, "page_bytes": 256, "subsector_bytes": 4096, "sector_bytes": 65536, "page_program_us": 600, "subsector_erase_ms": 290, "sector_erase_ms": 520, "bulk_erase_s": 165},
+    {"name": "s25fl256s", "vendor": "spansion", "jedec_id": "0x010219", "capacity_mib": 32, "page_bytes": 256, "subsector_bytes": 4096, "sector_bytes": 65536, "page_program_us": 340, "subsector_erase_ms": 130, "sector_erase_ms": 520, "bulk_erase_s": 330},
+    {"name": "w25q64jv", "vendor": "winbond", "jedec_id": "0xef4017", "capacity_mib": 8, "page_bytes": 256, "subsector_bytes": 4096, "sector_bytes": 65536, "page_program_us": 700, "subsector_erase_ms": 120, "sector_erase_ms": 1000, "bulk_erase_s": 100},
+    {"name": "m25p128", "vendor": "micron", "jedec_id": "0x202018", "capacity_mib": 16, "page_bytes": 256, "subsector_bytes": 262144, "sector_bytes": 262144, "page_program_us": 800, "subsector_erase_ms": 2000, "sector_erase_ms": 2000, "bulk_erase_s": 105, "quad": false, "notes": "the older carriers' part: one bit wide only, and nothing smaller than a sector to erase"}
+  ],
+  "adapters": [
+    {"model": "jtag-hs1", "vendor": "digilent", "max_clock_hz": 30000000, "voltages_mv": [1800, 2500, 3300, 5000]},
+    {"model": "jtag-hs2", "vendor": "digilent", "max_clock_hz": 30000000, "voltages_mv": [1800, 2500, 3300, 5000]},
+    {"model": "jtag-hs3", "vendor": "digilent", "max_clock_hz": 30000000, "voltages_mv": [1800, 2500, 3300]},
+    {"model": "jtag-smt2", "vendor": "digilent", "max_clock_hz": 30000000, "voltages_mv": [1800, 2500, 3300]},
+    {"model": "platform-cable-ii", "vendor": "xilinx", "max_clock_hz": 24000000, "voltages_mv": [1500, 1800, 2500, 3300]},
+    {"model": "ft2232h-mini", "vendor": "ftdi", "max_clock_hz": 30000000, "voltages_mv": [3300], "channels": 2, "buffered": false},
+    {"model": "arm-usb-tiny-h", "vendor": "olimex", "max_clock_hz": 30000000, "voltages_mv": [1800, 2500, 3300], "can_program_flash": false}
+  ]
+}

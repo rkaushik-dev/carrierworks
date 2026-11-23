@@ -1,11 +1,12 @@
 package io.github.rkaushikdev.carrierworks.catalog;
 
+import io.github.rkaushikdev.carrierworks.util.JsonValues;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
-/** What is actually inside each part the lab keeps on the shelf. */
+/** What is actually inside each part the lab keeps on the shelf, as the parts file lists it. */
 public final class Devices {
 
     /**
@@ -14,19 +15,19 @@ public final class Devices {
      */
     public static final long IDCODE_MASK = 0x0FFF_FFFFL;
 
-    private static final List<DeviceSpec> CATALOG = List.of(
-            new DeviceSpec("xc7s25", "spartan7", 0x037C4093L, 6, 14600, 29200, 45, 80, 9_935_552L, 0),
-            new DeviceSpec("xc7s50", "spartan7", 0x0362F093L, 6, 32600, 65200, 75, 120, 17_536_096L, 0),
-            new DeviceSpec("xc7a35t", "artix7", 0x0362D093L, 6, 20800, 41600, 50, 90, 17_536_096L, 4),
-            new DeviceSpec("xc7a50t", "artix7", 0x0362C093L, 6, 32600, 65200, 75, 120, 17_536_096L, 4),
-            new DeviceSpec("xc7a100t", "artix7", 0x03631093L, 6, 63400, 126800, 135, 240, 30_606_304L, 4),
-            new DeviceSpec("xc7a200t", "artix7", 0x03636093L, 6, 134600, 269200, 365, 740, 77_845_216L, 8),
-            new DeviceSpec("xc7k70t", "kintex7", 0x03647093L, 6, 41000, 82000, 135, 240, 24_090_592L, 8),
-            new DeviceSpec("xc7k325t", "kintex7", 0x03651093L, 6, 203800, 407600, 445, 840, 91_548_896L, 16),
-            new DeviceSpec("xc7k410t", "kintex7", 0x03656093L, 6, 254200, 508400, 795, 1540, 127_023_328L, 16),
-            new DeviceSpec("xc7z020", "zynq7000", 0x03727093L, 6, 53200, 106400, 140, 220, 32_364_512L, 0),
-            new DeviceSpec(
-                    "xcku040", "kintex_ultrascale", 0x03822093L, 6, 242400, 484800, 600, 1920, 126_411_296L, 20));
+    private static final List<DeviceSpec> CATALOG = CatalogFile.parts("devices").stream()
+            .map(entry -> new DeviceSpec(
+                    JsonValues.text(entry.get("device")),
+                    JsonValues.text(entry.get("family")),
+                    CatalogFile.hex(entry, "idcode"),
+                    CatalogFile.whole(entry, "ir_length", 0),
+                    CatalogFile.whole(entry, "luts", 0),
+                    CatalogFile.whole(entry, "flip_flops", 0),
+                    CatalogFile.whole(entry, "block_ram_36k", 0),
+                    CatalogFile.whole(entry, "dsp", 0),
+                    JsonValues.whole(entry.get("config_bits")),
+                    CatalogFile.whole(entry, "transceivers", 0)))
+            .toList();
 
     /** Every device the lab stocks, by device code and by masked idcode. */
     public static final CatalogIndex<DeviceSpec> DEVICES = new CatalogIndex<>(

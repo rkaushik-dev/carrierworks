@@ -42,6 +42,33 @@ class CatalogFileTest {
     }
 
     @Test
+    void flagsHexAndNumberListsAreRead() {
+        Map<String, Object> entry = Map.of("quad", false, "jedec_id", "0x20BA18", "voltages_mv", List.of(1800, "3300"));
+        assertThat(CatalogFile.flag(entry, "quad", true)).isFalse();
+        assertThat(CatalogFile.flag(Map.of(), "quad", true)).isTrue();
+        assertThat(CatalogFile.hex(entry, "jedec_id")).isEqualTo(0x20BA18L);
+        assertThat(CatalogFile.wholes(entry, "voltages_mv")).containsExactly(1800, 3300);
+        assertThat(CatalogFile.wholes(Map.of(), "voltages_mv")).isEmpty();
+    }
+
+    @Test
+    void aFlagThatIsNotAFlagIsRefused() {
+        assertThatThrownBy(() -> CatalogFile.flag(Map.of("quad", "yes"), "quad", true))
+                .isInstanceOf(CatalogError.class)
+                .hasMessageContaining("a flag was expected");
+        assertThatThrownBy(() -> CatalogFile.wholes(Map.of("voltages_mv", 1800), "voltages_mv"))
+                .isInstanceOf(CatalogError.class);
+    }
+
+    @Test
+    void thePartsFileHoldsAllThreeTables() {
+        assertThat(CatalogFile.parts("devices")).isNotEmpty();
+        assertThat(CatalogFile.parts("flash")).isNotEmpty();
+        assertThat(CatalogFile.parts("adapters")).isNotEmpty();
+        assertThat(CatalogFile.parts("cables")).isEmpty();
+    }
+
+    @Test
     void wholeNumbersMayBeWrittenAsText() {
         assertThat(CatalogFile.whole(Map.of("mv", "1_800"), "mv", 0)).isEqualTo(1800);
     }
