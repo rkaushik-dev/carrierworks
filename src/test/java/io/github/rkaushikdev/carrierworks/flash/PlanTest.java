@@ -66,6 +66,45 @@ class PlanTest {
     }
 
     @Test
+    void aFittedEraseFinishesTheTailInSubsectors() {
+        FlashPlan plan =
+                FlashPlan.forWrite(layout(), "update", filled(kib(64) + kib(6), 0xA5), EraseUnit.FITTED, false);
+        assertThat(plan.stepsOf(ERASE).stream().map(step -> List.of(step.address(), step.length())))
+                .containsExactly(List.of(0x800000L, kib(64)), List.of(0x810000L, kib(4)), List.of(0x811000L, kib(4)));
+        assertThat(plan.totalMs())
+                .isLessThan(FlashPlan.forWrite(layout(), "update", filled(kib(70), 0xA5), SECTOR, false)
+                        .totalMs());
+    }
+
+    @Test
+    void aFittedEraseTakesTheWholeSectorOnceSubsectorsWouldCostMore() {
+        // three subsectors are 900ms on this part, and the sector is 700ms
+        FlashPlan plan = FlashPlan.forWrite(layout(), "update", filled(kib(12) - 1, 0xA5), EraseUnit.FITTED, false);
+        assertThat(plan.stepsOf(ERASE)).extracting(FlashStep::length).containsExactly(kib(64));
+        FlashPlan two = FlashPlan.forWrite(layout(), "update", filled(kib(8), 0xA5), EraseUnit.FITTED, false);
+        assertThat(two.stepsOf(ERASE)).extracting(FlashStep::length).containsExactly(kib(4), kib(4));
+    }
+
+    @Test
+    void aFittedEraseOnAPartWithoutSubsectorsIsASectorErase() {
+        FlashLayout old = FlashLayout.halves(FlashParts.part("m25p128"));
+        FlashPlan plan = FlashPlan.forWrite(old, "update", filled(kib(300), 0xA5), EraseUnit.FITTED, false);
+        assertThat(plan.stepsOf(ERASE))
+                .extracting(FlashStep::length)
+                .containsOnly(262_144L)
+                .hasSize(2);
+    }
+
+    @Test
+    void aFittedEraseClearsEverythingTheWriteReaches() {
+        FlashPlan plan =
+                FlashPlan.forWrite(params(0x100, kib(100)), "params", filled(kib(70), 0x01), EraseUnit.FITTED, true);
+        long covered = plan.stepsOf(ERASE).stream().mapToLong(FlashStep::length).sum();
+        assertThat(plan.stepsOf(ERASE).getFirst().address()).isZero();
+        assertThat(covered).isGreaterThanOrEqualTo(0x100 + kib(70));
+    }
+
+    @Test
     void subsectorErasesAreOfferedForSmallWrites() {
         FlashPlan plan = FlashPlan.forWrite(params(0, kib(8)), "params", filled(kib(5), 0x01), SUBSECTOR, true);
         List<FlashStep> erases = plan.stepsOf(ERASE);

@@ -63,7 +63,7 @@ public record FlashPlan(FlashSpec part, String region, List<FlashStep> steps, lo
                     Details.of("region", target.name(), "image", data.length, "room", target.length()));
         }
         List<FlashStep> steps =
-                new ArrayList<>(eraseSteps(layout.part(), target.start(), target.start() + data.length, erase));
+                new ArrayList<>(erase.cover(layout.part(), target.start(), target.start() + data.length));
         steps.addAll(programSteps(layout.part(), target.start(), data.length));
         if (verify) {
             steps.addAll(verifySteps(target.start(), data.length));
@@ -79,8 +79,7 @@ public record FlashPlan(FlashSpec part, String region, List<FlashStep> steps, lo
     /** The steps to clear a whole region and leave it erased, in blocks of the size asked for. */
     public static FlashPlan forErase(FlashLayout layout, String region, EraseUnit erase) {
         FlashRegion target = layout.region(region);
-        return new FlashPlan(
-                layout.part(), target.name(), eraseSteps(layout.part(), target.start(), target.end(), erase), 0);
+        return new FlashPlan(layout.part(), target.name(), erase.cover(layout.part(), target.start(), target.end()), 0);
     }
 
     /** What the whole plan is expected to take, in milliseconds. */
@@ -119,17 +118,6 @@ public record FlashPlan(FlashSpec part, String region, List<FlashStep> steps, lo
                 + stepsOf(StepKind.PROGRAM).size() + " page writes, "
                 + stepsOf(StepKind.VERIFY).size()
                 + " reads, about " + totalSeconds() + "s";
-    }
-
-    /** Erase steps covering everything from the block {@code start} falls in up to {@code end}. */
-    private static List<FlashStep> eraseSteps(FlashSpec part, long start, long end, EraseUnit erase) {
-        long size = erase.bytes(part);
-        long cost = erase.milliseconds(part);
-        List<FlashStep> steps = new ArrayList<>();
-        for (long address = Math.floorDiv(start, size) * size; address < end; address += size) {
-            steps.add(new FlashStep(StepKind.ERASE, address, size, cost));
-        }
-        return steps;
     }
 
     /**

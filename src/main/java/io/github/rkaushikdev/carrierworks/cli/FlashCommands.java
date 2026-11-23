@@ -93,10 +93,16 @@ final class FlashCommands {
         @Option(names = "--subsectors", description = "erase in subsectors where the part has them")
         private boolean subsectors;
 
+        @Option(names = "--fitted", description = "whole sectors where quicker, subsectors at the ragged ends")
+        private boolean fitted;
+
         @Override
         int run(Context context) {
             FlashLayout layout = FlashLayout.halves(board(context, tag).flashSpec());
-            EraseUnit erase = subsectors ? EraseUnit.SUBSECTOR : EraseUnit.SECTOR;
+            if (subsectors && fitted) {
+                throw new UsageError("erase in subsectors or fitted, not both");
+            }
+            EraseUnit erase = fitted ? EraseUnit.FITTED : subsectors ? EraseUnit.SUBSECTOR : EraseUnit.SECTOR;
             FlashPlan plan;
             if (eraseOnly) {
                 plan = FlashPlan.forErase(layout, region, erase);

@@ -132,6 +132,24 @@ class CliFlashTest {
     }
 
     @Test
+    void aFittedErasePlanUsesSubsectorsAtTheEnds() throws IOException {
+        JsonNode sectors = shell.run("--json", "flash", "plan", "bx-14", "--image", stored())
+                .json();
+        JsonNode fitted = shell.run("--json", "flash", "plan", "bx-14", "--image", stored(), "--fitted")
+                .json();
+        assertThat(sectors.get(0).get("length").asLong()).isEqualTo(65_536);
+        assertThat(fitted.get(0).get("kind").asText()).isEqualTo("erase");
+        assertThat(fitted.get(0).get("length").asLong()).isEqualTo(4096);
+    }
+
+    @Test
+    void subsectorsAndFittedTogetherIsAUsageError() {
+        Shell.Result result = shell.run("flash", "plan", "bx-14", "--erase", "--subsectors", "--fitted");
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output()).contains("not both");
+    }
+
+    @Test
     void aPlanWithNeitherImageNorEraseIsAUsageError() {
         Shell.Result result = shell.run("flash", "plan", "bx-14");
         assertThat(result.exitCode()).isNotZero();
