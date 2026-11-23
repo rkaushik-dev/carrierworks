@@ -3,8 +3,14 @@ package io.github.rkaushikdev.carrierworks.persistence;
 import static io.github.rkaushikdev.carrierworks.persistence.Constraints.refused;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.rkaushikdev.carrierworks.reports.BuildReport;
+import io.github.rkaushikdev.carrierworks.reports.PulseWidth;
+import io.github.rkaushikdev.carrierworks.reports.SiteUsage;
+import io.github.rkaushikdev.carrierworks.reports.TimingSummary;
+import io.github.rkaushikdev.carrierworks.reports.Utilization;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -164,6 +170,56 @@ class PersistenceArtifactsTest {
             row.addReport(entry);
             session.persist(row);
         }));
+    }
+
+    @Test
+    void negativePulseWidthFailuresAreRefused() {
+        refused(() -> engine.sessionScope(session -> {
+            ArtifactRow row = artifact();
+            BuildReportRow entry = report();
+            entry.setPulseFailing(-1);
+            row.addReport(entry);
+            session.persist(row);
+        }));
+    }
+
+    @Test
+    void thePulseWidthGroupComesBackOutOfTheDatabase() {
+        String report =
+                """
+                | 0.147 | 0.000 | 0 | 100 | 0.021 | 0.000 | 0 | 100 | -0.250 | -0.500 | 2 | 40 |
+                """;
+        TimingSummary timing = TimingSummary.parse(report);
+        BuildReport built = new BuildReport(
+                DIGEST,
+                "radar_frontend",
+                NOW,
+                timing,
+                new Utilization(List.of(new SiteUsage("Slice LUTs", 45_000, 203_800))));
+        engine.sessionScope(session -> session.persist(artifact()));
+        engine.sessionScope(session -> new BuildReportRepository(session).add(built, NOW));
+        engine.sessionScope(session -> {
+            BuildReport found =
+                    new BuildReportRepository(session).forDigest(DIGEST).orElseThrow();
+            assertThat(found.timing().pulseWidth()).isEqualTo(new PulseWidth(-250, -500, 2, 40));
+            assertThat(found.closed()).isFalse();
+            assertThat(found.timing().failingEndpoints()).isEqualTo(2);
+        });
+    }
+
+    @Test
+    void aReportReadBeforePulseWidthWasKeptReadsAsMet() {
+        engine.sessionScope(session -> {
+            ArtifactRow row = artifact();
+            row.addReport(report());
+            session.persist(row);
+        });
+        engine.sessionScope(session -> assertThat(new BuildReportRepository(session)
+                        .forDigest(DIGEST)
+                        .orElseThrow()
+                        .timing()
+                        .pulseWidth())
+                .isEqualTo(PulseWidth.NOT_REPORTED));
     }
 
     @Test

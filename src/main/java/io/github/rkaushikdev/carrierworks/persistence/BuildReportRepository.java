@@ -2,6 +2,7 @@ package io.github.rkaushikdev.carrierworks.persistence;
 
 import io.github.rkaushikdev.carrierworks.NotFound;
 import io.github.rkaushikdev.carrierworks.reports.BuildReport;
+import io.github.rkaushikdev.carrierworks.reports.PulseWidth;
 import io.github.rkaushikdev.carrierworks.reports.SiteUsage;
 import io.github.rkaushikdev.carrierworks.reports.TimingSummary;
 import io.github.rkaushikdev.carrierworks.reports.Utilization;
@@ -31,14 +32,20 @@ public final class BuildReportRepository {
         row.setDigest(report.digest());
         row.setDesign(report.design());
         row.setReadAt(readAt);
-        row.setWnsPs(Math.toIntExact(report.timing().wnsPs()));
-        row.setTnsPs(Math.toIntExact(report.timing().tnsPs()));
-        row.setSetupFailing(report.timing().setupFailing());
-        row.setSetupTotal(report.timing().setupTotal());
-        row.setWhsPs(Math.toIntExact(report.timing().whsPs()));
-        row.setThsPs(Math.toIntExact(report.timing().thsPs()));
-        row.setHoldFailing(report.timing().holdFailing());
-        row.setHoldTotal(report.timing().holdTotal());
+        TimingSummary timing = report.timing();
+        row.setWnsPs(Math.toIntExact(timing.wnsPs()));
+        row.setTnsPs(Math.toIntExact(timing.tnsPs()));
+        row.setSetupFailing(timing.setupFailing());
+        row.setSetupTotal(timing.setupTotal());
+        row.setWhsPs(Math.toIntExact(timing.whsPs()));
+        row.setThsPs(Math.toIntExact(timing.thsPs()));
+        row.setHoldFailing(timing.holdFailing());
+        row.setHoldTotal(timing.holdTotal());
+        PulseWidth pulse = timing.pulseWidth();
+        row.setWpwsPs(Math.toIntExact(pulse.wpwsPs()));
+        row.setTpwsPs(Math.toIntExact(pulse.tpwsPs()));
+        row.setPulseFailing(pulse.failing());
+        row.setPulseTotal(pulse.total());
         row.setLuts(report.utilization().luts());
         row.setRegisters(report.utilization().registers());
         row.setBlockRam(report.utilization().blockRam());
@@ -118,7 +125,8 @@ public final class BuildReportRepository {
                 row.getHoldFailing(),
                 row.getHoldTotal(),
                 row.getDesign(),
-                List.of());
+                List.of(),
+                new PulseWidth(row.getWpwsPs(), row.getTpwsPs(), row.getPulseFailing(), row.getPulseTotal()));
         Utilization utilization = new Utilization(
                 List.of(
                         new SiteUsage("Slice LUTs", row.getLuts(), Math.max(row.getLuts(), 1)),

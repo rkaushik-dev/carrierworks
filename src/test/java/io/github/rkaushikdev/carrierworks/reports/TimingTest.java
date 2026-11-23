@@ -187,6 +187,44 @@ class TimingTest {
     }
 
     @Test
+    void thePulseWidthGroupIsReadWhenTheLogPrintsIt() {
+        PulseWidth pulse = TimingSummary.parse(LOGGED).pulseWidth();
+        assertThat(pulse).isEqualTo(new PulseWidth(3750, 0, 0, 4187));
+        assertThat(pulse.met()).isTrue();
+    }
+
+    @Test
+    void anEightCellSummaryHasNoPulseWidthToFail() {
+        TimingSummary summary = TimingSummary.parse(REPORT);
+        assertThat(summary.pulseWidth()).isEqualTo(PulseWidth.NOT_REPORTED);
+        assertThat(summary.met()).isTrue();
+    }
+
+    @Test
+    void aFailingPulseWidthMeansTheDesignDidNotClose() {
+        String row = "| 0.147 | 0.000 | 0 | 100 | 0.021 | 0.000 | 0 | 100 | -0.250 | -0.500 | 2 | 40 |";
+        TimingSummary summary = TimingSummary.parse(row);
+        assertThat(summary.setupMet()).isTrue();
+        assertThat(summary.holdMet()).isTrue();
+        assertThat(summary.met()).isFalse();
+        assertThat(summary.failingEndpoints()).isEqualTo(2);
+        assertThat(summary.worstSlackPs()).isEqualTo(21);
+        assertThat(summary.describe())
+                .isEqualTo("did not close: wns 0.147 ns, whs 0.021 ns, wpws -0.250 ns, 2 failing");
+    }
+
+    @Test
+    void aNegativeWorstPulseWidthSlackFailsEvenWithNoCountedFailures() {
+        assertThat(new PulseWidth(-1, 0, 0, 10).met()).isFalse();
+    }
+
+    @Test
+    void aPulseWidthGroupThatDoesNotAddUpIsRefused() {
+        assertThatThrownBy(() -> new PulseWidth(0, 0, 3, 2)).isInstanceOf(ValidationError.class);
+        assertThatThrownBy(() -> new PulseWidth(0, 0, -1, 2)).isInstanceOf(ValidationError.class);
+    }
+
+    @Test
     void aSummaryThatClaimsMoreFailuresThanEndpointsIsRefused() {
         assertThatThrownBy(() -> new TimingSummary(-100, -100, 10, 5, 0, 0, 0, 5))
                 .isInstanceOf(ValidationError.class);

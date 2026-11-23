@@ -31,6 +31,7 @@ import org.hibernate.annotations.OnDeleteAction;
         indexes = {@Index(name = "ix_build_reports_design", columnList = "design")})
 @Check(name = "ck_reports_setup_failing", constraints = "setup_failing >= 0")
 @Check(name = "ck_reports_hold_failing", constraints = "hold_failing >= 0")
+@Check(name = "ck_reports_pulse_failing", constraints = "pulse_failing >= 0")
 public class BuildReportRow {
 
     @Id
@@ -70,6 +71,18 @@ public class BuildReportRow {
 
     @Column(name = "hold_total", nullable = false)
     private int holdTotal = 0;
+
+    @Column(name = "wpws_ps", nullable = false)
+    private int wpwsPs = 0;
+
+    @Column(name = "tpws_ps", nullable = false)
+    private int tpwsPs = 0;
+
+    @Column(name = "pulse_failing", nullable = false)
+    private int pulseFailing = 0;
+
+    @Column(name = "pulse_total", nullable = false)
+    private int pulseTotal = 0;
 
     @Column(name = "luts", nullable = false)
     private int luts = 0;
@@ -188,6 +201,38 @@ public class BuildReportRow {
 
     public void setHoldTotal(int value) {
         holdTotal = value;
+    }
+
+    public int getWpwsPs() {
+        return wpwsPs;
+    }
+
+    public void setWpwsPs(int value) {
+        wpwsPs = value;
+    }
+
+    public int getTpwsPs() {
+        return tpwsPs;
+    }
+
+    public void setTpwsPs(int value) {
+        tpwsPs = value;
+    }
+
+    public int getPulseFailing() {
+        return pulseFailing;
+    }
+
+    public void setPulseFailing(int value) {
+        pulseFailing = value;
+    }
+
+    public int getPulseTotal() {
+        return pulseTotal;
+    }
+
+    public void setPulseTotal(int value) {
+        pulseTotal = value;
     }
 
     public int getLuts() {

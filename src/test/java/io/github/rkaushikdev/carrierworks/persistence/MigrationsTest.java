@@ -163,7 +163,7 @@ class MigrationsTest {
         MigrationVersion latest =
                 flyway.info().all()[flyway.info().all().length - 1].getVersion();
         assertThat(flyway.info().current().getVersion()).isEqualTo(latest);
-        assertThat(latest.getVersion()).isEqualTo("6");
+        assertThat(latest.getVersion()).isEqualTo("7");
     }
 
     /** A site part way up the history upgrades the rest of the way. */

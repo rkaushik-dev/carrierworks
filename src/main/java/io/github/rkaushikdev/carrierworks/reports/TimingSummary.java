@@ -7,6 +7,7 @@ import io.github.rkaushikdev.carrierworks.ValidationError;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,6 +39,7 @@ import java.util.regex.Pattern;
  * @param holdTotal hold endpoints in all
  * @param design the design the report names, as a design name, or empty
  * @param clocks the clocks the report lists, in report order
+ * @param pulseWidth the pulse width group, or {@link PulseWidth#NOT_REPORTED} when the report has none
  */
 public record TimingSummary(
         long wnsPs,
@@ -49,7 +51,8 @@ public record TimingSummary(
         int holdFailing,
         int holdTotal,
         String design,
-        List<ClockConstraint> clocks) {
+        List<ClockConstraint> clocks,
+        PulseWidth pulseWidth) {
 
     private static final String NUMBER = "-?\\d+(?:\\.\\d+)?";
     private static final Pattern SLACK = Pattern.compile(NUMBER);
@@ -78,6 +81,33 @@ public record TimingSummary(
                     Details.of("setup", setupFailing + "/" + setupTotal, "hold", holdFailing + "/" + holdTotal));
         }
         clocks = List.copyOf(clocks);
+        Objects.requireNonNull(pulseWidth, "pulseWidth");
+    }
+
+    /** A summary with no pulse width group, which is what the older reports print. */
+    public TimingSummary(
+            long wnsPs,
+            long tnsPs,
+            int setupFailing,
+            int setupTotal,
+            long whsPs,
+            long thsPs,
+            int holdFailing,
+            int holdTotal,
+            String design,
+            List<ClockConstraint> clocks) {
+        this(
+                wnsPs,
+                tnsPs,
+                setupFailing,
+                setupTotal,
+                whsPs,
+                thsPs,
+                holdFailing,
+                holdTotal,
+                design,
+                clocks,
+                PulseWidth.NOT_REPORTED);
     }
 
     /** The eight numbers on their own, with no design named and no clocks. */
@@ -133,7 +163,14 @@ public record TimingSummary(
                 Integer.parseInt(cells.get(6)),
                 Integer.parseInt(cells.get(7)),
                 design,
-                clocks);
+                clocks,
+                cells.size() == SUMMARY_CELLS
+                        ? PulseWidth.NOT_REPORTED
+                        : new PulseWidth(
+                                Measure.picosecondsFromNs(cells.get(8)),
+                                Measure.picosecondsFromNs(cells.get(9)),
+                                Integer.parseInt(cells.get(10)),
+                                Integer.parseInt(cells.get(11))));
     }
 
     /**
@@ -173,9 +210,9 @@ public record TimingSummary(
         return whsPs >= 0 && holdFailing == 0;
     }
 
-    /** Whether the design closed, both ways. */
+    /** Whether the design closed: setup, hold, and every pulse width check. */
     public boolean met() {
-        return setupMet() && holdMet();
+        return setupMet() && holdMet() && pulseWidth.met();
     }
 
     /** The worse of the two worst slacks, which is what a gate reads. */
@@ -183,9 +220,9 @@ public record TimingSummary(
         return Math.min(wnsPs, whsPs);
     }
 
-    /** Setup and hold endpoints failing between them. */
+    /** Setup, hold and pulse width endpoints failing between them. */
     public int failingEndpoints() {
-        return setupFailing + holdFailing;
+        return setupFailing + holdFailing + pulseWidth.failing();
     }
 
     /** The clock with the highest frequency, the first of them on a tie. */
@@ -197,7 +234,8 @@ public record TimingSummary(
     public String describe() {
         String verdict = met() ? "closed" : "did not close";
         String name = design.isEmpty() ? "" : design + " ";
+        String pulse = pulseWidth.met() ? "" : "wpws " + Measure.renderNs(pulseWidth.wpwsPs()) + " ns, ";
         return name + verdict + ": wns " + Measure.renderNs(wnsPs) + " ns, whs " + Measure.renderNs(whsPs) + " ns, "
-                + failingEndpoints() + " failing";
+                + pulse + failingEndpoints() + " failing";
     }
 }
