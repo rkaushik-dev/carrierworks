@@ -42,10 +42,17 @@ public final class Mcs {
     /** A record carrying the upper sixteen bits of the addresses that follow. */
     public static final int EXTENDED_LINEAR = 0x04;
 
+    /** A record carrying the paragraph, sixteen bytes a step, the addresses that follow sit above. */
+    public static final int EXTENDED_SEGMENT = 0x02;
+
+    /** A record carrying the address a processor would start executing at. */
+    public static final int START_LINEAR = 0x05;
+
     /** How many bytes a data record carries unless asked otherwise. */
     public static final int DEFAULT_RECORD_BYTES = 16;
 
     private static final long SEGMENT = 0x10000;
+    private static final long PARAGRAPH = 16;
     private static final long ADDRESS_SPACE = 0x1_0000_0000L;
     private static final HexFormat UPPER_HEX = HexFormat.of().withUpperCase();
 
@@ -123,11 +130,16 @@ public final class Mcs {
      * one image. Joining them back together is the caller's decision because it needs a fill value
      * and the caller knows which one.
      *
+     * <p>Files from other programmers are read too. Some address past sixty four kilobytes with
+     * extended segment records, sixteen byte paragraphs in the old real mode way, instead of linear
+     * ones, and some end with a start linear address record naming where a processor would begin
+     * executing. A flash image has no entry point, so that record is checked and then set aside.
+     *
      * @throws ValidationError naming the line, when a record is malformed or the file never ends
      */
     public static List<HexRegion> read(String text) {
         List<Run> runs = new ArrayList<>();
-        long segment = 0;
+        long base = 0;
         boolean ended = false;
         List<String> lines = lines(text);
         for (int index = 0; index < lines.size(); index++) {
@@ -139,40 +151,25 @@ public final class Mcs {
             if (ended) {
                 throw malformed("records after the end of file record", number);
             }
-            if (!line.startsWith(":")) {
-                throw malformed("a hex record starts with a colon", number);
-            }
-            byte[] body = fromHex(line.substring(1)).orElseThrow(() -> malformed("a hex record is hex", number));
-            if (body.length < 5) {
-                throw malformed("a hex record is at least five bytes", number);
-            }
-            if ((sum(body, body.length) & 0xFF) != 0) {
-                throw malformed("a hex record failed its checksum", number);
-            }
-            int count = Byte.toUnsignedInt(body[0]);
-            int address = (Byte.toUnsignedInt(body[1]) << 8) | Byte.toUnsignedInt(body[2]);
-            int recordType = Byte.toUnsignedInt(body[3]);
-            byte[] payload = Arrays.copyOfRange(body, 4, body.length - 1);
-            if (payload.length != count) {
-                throw malformed("a hex record lied about its length", number);
-            }
-            if (recordType == END_OF_FILE) {
-                ended = true;
-            } else if (recordType == EXTENDED_LINEAR) {
-                if (count != 2) {
-                    throw malformed("a segment record carries two bytes", number);
+            HexLine record = HexLine.decode(line, number);
+            switch (record.type()) {
+                case END_OF_FILE -> ended = true;
+                case EXTENDED_LINEAR -> base = record.upperWord("a segment record carries two bytes") * SEGMENT;
+                case EXTENDED_SEGMENT -> base = record.upperWord("a segment record carries two bytes") * PARAGRAPH;
+                case START_LINEAR -> record.expectLength(4, "a start address record carries four bytes");
+                case DATA -> {
+                    long start = base + record.address();
+                    if (!runs.isEmpty() && runs.getLast().end() == start) {
+                        runs.getLast().bytes.writeBytes(record.payload());
+                    } else {
+                        runs.add(new Run(start, record.payload()));
+                    }
                 }
-                segment = (Byte.toUnsignedInt(payload[0]) << 8) | Byte.toUnsignedInt(payload[1]);
-            } else if (recordType == DATA) {
-                long start = segment * SEGMENT + address;
-                if (!runs.isEmpty() && runs.getLast().end() == start) {
-                    runs.getLast().bytes.writeBytes(payload);
-                } else {
-                    runs.add(new Run(start, payload));
-                }
-            } else {
-                throw new ValidationError(
-                        "unsupported hex record type", "mcs", Details.of("line", number, "record_type", recordType));
+                default ->
+                    throw new ValidationError(
+                            "unsupported hex record type",
+                            "mcs",
+                            Details.of("line", number, "record_type", record.type()));
             }
         }
         if (!ended) {
@@ -303,6 +300,40 @@ public final class Mcs {
             case '\n', '\r', '\u000B', '\f', '\u001C', '\u001D', '\u001E', '\u0085', ' ', ' ' -> true;
             default -> false;
         };
+    }
+
+    /** One line of a hex file, checked and taken apart. */
+    private record HexLine(int number, int type, int address, byte[] payload) {
+
+        static HexLine decode(String line, int number) {
+            if (!line.startsWith(":")) {
+                throw malformed("a hex record starts with a colon", number);
+            }
+            byte[] body = fromHex(line.substring(1)).orElseThrow(() -> malformed("a hex record is hex", number));
+            if (body.length < 5) {
+                throw malformed("a hex record is at least five bytes", number);
+            }
+            if ((sum(body, body.length) & 0xFF) != 0) {
+                throw malformed("a hex record failed its checksum", number);
+            }
+            byte[] payload = Arrays.copyOfRange(body, 4, body.length - 1);
+            if (payload.length != Byte.toUnsignedInt(body[0])) {
+                throw malformed("a hex record lied about its length", number);
+            }
+            int address = (Byte.toUnsignedInt(body[1]) << 8) | Byte.toUnsignedInt(body[2]);
+            return new HexLine(number, Byte.toUnsignedInt(body[3]), address, payload);
+        }
+
+        void expectLength(int length, String message) {
+            if (payload.length != length) {
+                throw malformed(message, number);
+            }
+        }
+
+        long upperWord(String message) {
+            expectLength(2, message);
+            return (Byte.toUnsignedInt(payload[0]) << 8) | Byte.toUnsignedInt(payload[1]);
+        }
     }
 
     /** One run of contiguous data being read. */

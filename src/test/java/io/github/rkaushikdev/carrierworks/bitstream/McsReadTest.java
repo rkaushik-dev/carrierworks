@@ -185,6 +185,57 @@ class McsReadTest {
     }
 
     @Test
+    void anExtendedSegmentRecordAddressesInSixteenBytePages() {
+        String text = Mcs.hexRecord(0, Mcs.EXTENDED_SEGMENT, new byte[] {0x10, 0x00}) + "\n"
+                + Mcs.hexRecord(0x0010, Mcs.DATA, new byte[] {1, 2, 3, 4}) + "\n"
+                + ":00000001FF\n";
+        List<HexRegion> regions = Mcs.read(text);
+        assertThat(regions).hasSize(1);
+        assertThat(regions.getFirst().start()).isEqualTo(0x1_0010L);
+        assertThat(regions.getFirst().data()).containsExactly(1, 2, 3, 4);
+    }
+
+    @Test
+    void segmentAndLinearRecordsLandInTheSamePlace() {
+        String segment = Mcs.hexRecord(0, Mcs.EXTENDED_SEGMENT, new byte[] {0x20, 0x00}) + "\n"
+                + Mcs.hexRecord(0, Mcs.DATA, new byte[] {9}) + "\n:00000001FF\n";
+        String linear = Mcs.hexRecord(0, Mcs.EXTENDED_LINEAR, new byte[] {0x00, 0x02}) + "\n"
+                + Mcs.hexRecord(0, Mcs.DATA, new byte[] {9}) + "\n:00000001FF\n";
+        assertThat(Mcs.read(segment)).isEqualTo(Mcs.read(linear));
+    }
+
+    @Test
+    void aSegmentRecordOfTheWrongLengthIsRefusedEitherWay() {
+        String line = Mcs.hexRecord(0, Mcs.EXTENDED_SEGMENT, new byte[3]);
+        assertThatThrownBy(() -> Mcs.read(line + "\n:00000001FF\n"))
+                .isInstanceOf(ValidationError.class)
+                .hasMessageContaining("segment record carries two bytes");
+    }
+
+    @Test
+    void aStartAddressIsSetAsideRatherThanLoaded() {
+        byte[] image = counting(40);
+        String text = Mcs.write(image).replace(":00000001FF\n", "")
+                + Mcs.hexRecord(0, Mcs.START_LINEAR, new byte[] {0, 0, 0, 0}) + "\n:00000001FF\n";
+        assertThat(Mcs.flatten(Mcs.read(text)).data()).isEqualTo(image);
+    }
+
+    @Test
+    void aStartAddressThatIsNotFourBytesIsRefused() {
+        String line = Mcs.hexRecord(0, Mcs.START_LINEAR, new byte[2]);
+        assertThatThrownBy(() -> Mcs.read(line + "\n:00000001FF\n"))
+                .isInstanceOf(ValidationError.class)
+                .hasMessageContaining("start address record carries four bytes");
+    }
+
+    @Test
+    void aMalformedLineAfterTheEndIsReportedAsBeingAfterTheEnd() {
+        assertThatThrownBy(() -> Mcs.read(":00000001FF\nnot a record\n"))
+                .isInstanceOf(ValidationError.class)
+                .hasMessageContaining("after the end of file record");
+    }
+
+    @Test
     void aBigImageRoundTripsByteForByte() {
         byte[] image = counting(256 * 400);
         HexRegion flat = Mcs.flatten(Mcs.read(Mcs.write(image, 0, 32)));
