@@ -129,6 +129,63 @@ class TimingTest {
         assertThat(TimingSummary.parse(plain).wnsPs()).isEqualTo(147);
     }
 
+    /** The summary the way the place and route log prints it: columns under headings, no bars. */
+    private static final String LOGGED =
+            """
+            ------------------------------------------------------------------------------------------------
+            | Design Timing Summary
+            | ---------------------
+            ------------------------------------------------------------------------------------------------
+
+                WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  \
+            THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints
+                -------      -------  ---------------------  -------------------      -------      -------  \
+            ---------------------  -------------------     --------     --------  ----------------------  --------------------
+                 -0.088       -0.351                      6                 9412        0.052        0.000  \
+                                0                 9412        3.750        0.000                       0                  4187
+
+
+            All user specified timing constraints are met.
+            """;
+
+    @Test
+    void theSummaryIsReadTheWayTheLogPrintsIt() {
+        TimingSummary summary = TimingSummary.parse(LOGGED);
+        assertThat(summary.wnsPs()).isEqualTo(-88);
+        assertThat(summary.tnsPs()).isEqualTo(-351);
+        assertThat(summary.setupFailing()).isEqualTo(6);
+        assertThat(summary.setupTotal()).isEqualTo(9412);
+        assertThat(summary.whsPs()).isEqualTo(52);
+        assertThat(summary.holdTotal()).isEqualTo(9412);
+        assertThat(summary.setupMet()).isFalse();
+    }
+
+    @Test
+    void aRowOfTwelveCellsBetweenBarsIsASummaryToo() {
+        String row = "| 0.147 | 0.000 | 0 | 100 | 0.021 | 0.000 | 0 | 100 | 3.750 | 0.000 | 0 | 40 |";
+        assertThat(TimingSummary.parse(row).whsPs()).isEqualTo(21);
+    }
+
+    @Test
+    void aRowThatIsNotEightOrTwelveCellsIsNotASummary() {
+        assertThat(TimingSummary.summaryCells("0.147 0.000 0 100 0.021 0.000 0 100 9"))
+                .isEmpty();
+        assertThat(TimingSummary.summaryCells("0.147 0.000 0 100 0.021 0.000 0"))
+                .isEmpty();
+        assertThat(TimingSummary.summaryCells("0.147 0.000 0 100 0.021 0.000 0 100"))
+                .hasValueSatisfying(cells -> assertThat(cells).hasSize(8));
+    }
+
+    @Test
+    void aCountWhereASlackBelongsIsNotASummary() {
+        assertThat(TimingSummary.summaryCells("| 0.147 | 0.000 | 0.5 | 100 | 0.021 | 0.000 | 0 | 100 |"))
+                .isEmpty();
+        assertThat(TimingSummary.summaryCells("| WNS(ns) | TNS(ns) | a | b | c | d | e | f |"))
+                .isEmpty();
+        assertThat(TimingSummary.summaryCells("sys_clk 0.147 0.000 0 100 0.021 0.000 0"))
+                .isEmpty();
+    }
+
     @Test
     void aSummaryThatClaimsMoreFailuresThanEndpointsIsRefused() {
         assertThatThrownBy(() -> new TimingSummary(-100, -100, 10, 5, 0, 0, 0, 5))

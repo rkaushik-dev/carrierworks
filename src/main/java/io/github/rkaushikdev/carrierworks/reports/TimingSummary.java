@@ -52,14 +52,11 @@ public record TimingSummary(
         List<ClockConstraint> clocks) {
 
     private static final String NUMBER = "-?\\d+(?:\\.\\d+)?";
-    private static final Pattern SUMMARY_ROW = Pattern.compile("\\|?\\s*(?<wns>" + NUMBER + ")\\s*\\|"
-            + "\\s*(?<tns>" + NUMBER + ")\\s*\\|"
-            + "\\s*(?<tnsFailing>\\d+)\\s*\\|"
-            + "\\s*(?<tnsTotal>\\d+)\\s*\\|"
-            + "\\s*(?<whs>" + NUMBER + ")\\s*\\|"
-            + "\\s*(?<ths>" + NUMBER + ")\\s*\\|"
-            + "\\s*(?<thsFailing>\\d+)\\s*\\|"
-            + "\\s*(?<thsTotal>\\d+)\\s*\\|?\\s*");
+    private static final Pattern SLACK = Pattern.compile(NUMBER);
+    private static final Pattern COUNT = Pattern.compile("\\d+");
+    private static final Pattern CELL_SEPARATOR = Pattern.compile("\\s*\\|\\s*");
+    private static final Pattern SPACES = Pattern.compile("\\s+");
+    private static final int SUMMARY_CELLS = 8;
     private static final Pattern CLOCK_ROW = Pattern.compile("\\s*(?<name>[a-zA-Z][\\w/\\[\\].]*)\\s+"
             + "\\{(?<waveform>[^}]*)\\}\\s+"
             + "(?<period>" + NUMBER + ")\\s+"
@@ -99,16 +96,18 @@ public record TimingSummary(
     /**
      * Pull the summary out of a report, wherever the tool put it.
      *
-     * <p>The first summary row wins when a report holds several, the leading bar on it is optional,
-     * the design comes from the first {@code Design : name} line, and the clocks from every row of
-     * the clock table.
+     * <p>The first summary row wins when a report holds several, the design comes from the first
+     * {@code Design : name} line, and the clocks from every row of the clock table. The row is read
+     * either as the bench's own reports write it, cells between bars with the leading bar optional,
+     * or as the place and route tool prints it to its log, cells lined up under their headings with
+     * nothing but spaces between them.
      *
      * @throws ValidationError when the report holds no summary row, or the row does not hold up
      */
     public static TimingSummary parse(String report) {
         String design = "";
         List<ClockConstraint> clocks = new ArrayList<>();
-        TimingSummary summary = null;
+        Optional<List<String>> row = Optional.empty();
         for (String line : report.lines().toList()) {
             if (design.isEmpty()) {
                 design = ReportLines.design(line).orElse("");
@@ -119,35 +118,49 @@ public record TimingSummary(
                         clock.group("name"),
                         Measure.picosecondsFromNs(clock.group("period")),
                         Double.parseDouble(clock.group("frequency"))));
-                continue;
-            }
-            Matcher row = SUMMARY_ROW.matcher(line.strip());
-            if (row.matches() && summary == null) {
-                summary = new TimingSummary(
-                        Measure.picosecondsFromNs(row.group("wns")),
-                        Measure.picosecondsFromNs(row.group("tns")),
-                        Integer.parseInt(row.group("tnsFailing")),
-                        Integer.parseInt(row.group("tnsTotal")),
-                        Measure.picosecondsFromNs(row.group("whs")),
-                        Measure.picosecondsFromNs(row.group("ths")),
-                        Integer.parseInt(row.group("thsFailing")),
-                        Integer.parseInt(row.group("thsTotal")));
+            } else if (row.isEmpty()) {
+                row = summaryCells(line);
             }
         }
-        if (summary == null) {
-            throw new ValidationError("no timing summary in that report", "report");
-        }
+        List<String> cells = row.orElseThrow(() -> new ValidationError("no timing summary in that report", "report"));
         return new TimingSummary(
-                summary.wnsPs,
-                summary.tnsPs,
-                summary.setupFailing,
-                summary.setupTotal,
-                summary.whsPs,
-                summary.thsPs,
-                summary.holdFailing,
-                summary.holdTotal,
+                Measure.picosecondsFromNs(cells.get(0)),
+                Measure.picosecondsFromNs(cells.get(1)),
+                Integer.parseInt(cells.get(2)),
+                Integer.parseInt(cells.get(3)),
+                Measure.picosecondsFromNs(cells.get(4)),
+                Measure.picosecondsFromNs(cells.get(5)),
+                Integer.parseInt(cells.get(6)),
+                Integer.parseInt(cells.get(7)),
                 design,
                 clocks);
+    }
+
+    /**
+     * The cells of a summary row, or nothing when the line is not one: two slacks and two counts
+     * for setup, then the same again for hold, and the same again for pulse width when the tool
+     * printed that group too.
+     */
+    static Optional<List<String>> summaryCells(String line) {
+        String stripped = line.strip();
+        if (stripped.startsWith("|")) {
+            stripped = stripped.substring(1);
+        }
+        if (stripped.endsWith("|")) {
+            stripped = stripped.substring(0, stripped.length() - 1);
+        }
+        Pattern separator = stripped.contains("|") ? CELL_SEPARATOR : SPACES;
+        List<String> cells = List.of(separator.split(stripped.strip()));
+        if (cells.size() != SUMMARY_CELLS && cells.size() != SUMMARY_CELLS + 4) {
+            return Optional.empty();
+        }
+        for (int index = 0; index < cells.size(); index++) {
+            Pattern wanted = index % 4 < 2 ? SLACK : COUNT;
+            if (!wanted.matcher(cells.get(index)).matches()) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(cells);
     }
 
     /** Whether setup closed: no negative worst slack and nothing failing. */
