@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Runs one programming job at a time against whatever the bench hands it: gates, attempt, journal,
@@ -150,7 +151,12 @@ public final class JobRunner {
                 .report();
         if (!report.allowed()) {
             String reason = String.join("; ", report.blockers());
-            journal.append(job.id(), JournalEvent.FAILED, now, Details.of("board", job.board(), "reason", reason));
+            String gates = report.refusedBy().stream().map(Gate::value).collect(Collectors.joining(","));
+            journal.append(
+                    job.id(),
+                    JournalEvent.FAILED,
+                    now,
+                    Details.of("board", job.board(), "reason", reason, "gates", gates));
             return new RunResult(job.start(now).failed(now, reason, "gate"), reason);
         }
         return attempt(job, record, now, drivers);

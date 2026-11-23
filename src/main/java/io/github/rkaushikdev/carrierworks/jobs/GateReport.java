@@ -9,17 +9,27 @@ import java.util.Objects;
  * @param job the job's id
  * @param blockers every reason the job may not run, in the order the gates found them; none when it
  *     may
+ * @param gates the gate behind each blocker, in the same order
  */
-public record GateReport(String job, List<String> blockers) {
+public record GateReport(String job, List<String> blockers, List<Gate> gates) {
 
     public GateReport {
         Objects.requireNonNull(job, "job");
         blockers = List.copyOf(blockers);
+        gates = List.copyOf(gates);
+        if (gates.size() != blockers.size()) {
+            throw new IllegalArgumentException("every blocker comes from one gate");
+        }
     }
 
     /** A job nothing stands in the way of. */
     public GateReport(String job) {
-        this(job, List.of());
+        this(job, List.of(), List.of());
+    }
+
+    /** The gates that refused the job, each once, in gate order. */
+    public List<Gate> refusedBy() {
+        return gates.stream().distinct().sorted().toList();
     }
 
     /** Whether the job may run. */

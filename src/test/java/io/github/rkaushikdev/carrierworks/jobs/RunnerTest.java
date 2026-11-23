@@ -187,6 +187,8 @@ class RunnerTest {
         assertThat(result.willRetry()).isFalse();
         assertThat(bench.book.state("bx-14").state()).isEqualTo(BoardStatus.LEASED);
         assertThat(result.detail()).contains("takes qual or golden");
+        JournalEntry refused = bench.journal.lastEvent("job-00001").orElseThrow();
+        assertThat(refused.detail()).containsEntry("gates", "channel");
     }
 
     @Test

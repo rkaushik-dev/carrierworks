@@ -3,8 +3,6 @@ package io.github.rkaushikdev.carrierworks.jobs;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactRecord;
 import io.github.rkaushikdev.carrierworks.artifacts.Channel;
 import io.github.rkaushikdev.carrierworks.bitstream.ConfigOptions;
-import io.github.rkaushikdev.carrierworks.bitstream.SpiRead;
-import io.github.rkaushikdev.carrierworks.catalog.DeviceSpec;
 import io.github.rkaushikdev.carrierworks.catalog.FlashSpec;
 import io.github.rkaushikdev.carrierworks.flash.FlashLayout;
 import io.github.rkaushikdev.carrierworks.flash.FlashRegion;
@@ -12,7 +10,6 @@ import io.github.rkaushikdev.carrierworks.flash.WearLedger;
 import io.github.rkaushikdev.carrierworks.inventory.Board;
 import io.github.rkaushikdev.carrierworks.inventory.BoardState;
 import io.github.rkaushikdev.carrierworks.inventory.BoardStatus;
-import io.github.rkaushikdev.carrierworks.jtag.AdapterUnit;
 import io.github.rkaushikdev.carrierworks.leases.Lease;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +47,7 @@ import java.util.stream.Collectors;
  * </ul>
  *
  * <p>The blockers are sentences operators read, and {@link GateReport#describe()} puts them in one
- * line.
+ * line. Each one is reported with the {@link Gate} behind it, in gate order.
  */
 public final class Gates {
 
@@ -140,109 +137,127 @@ public final class Gates {
             return this;
         }
 
-        /** Run every check and report all of them at once. */
+        /** Run every gate that applies to the job and report all of them at once, in gate order. */
         public GateReport report() {
             List<String> blockers = new ArrayList<>();
-            blockers.addAll(leaseBlockers());
-            blockers.addAll(deviceBlockers());
-            List<Channel> allowed = allowedChannels(job.mode());
-            if (allowed.stream().noneMatch(channel -> channel.value().equals(record.channel()))) {
-                String channels = allowed.stream().map(Channel::value).collect(Collectors.joining(" or "));
-                blockers.add("a " + job.mode().value() + " write takes " + channels + " images and this one is in "
-                        + record.channel());
+            List<Gate> refusing = new ArrayList<>();
+            for (Gate gate : Gate.values()) {
+                if (gate.flashOnly() && !job.writesFlash()) {
+                    continue;
+                }
+                for (String blocker : blockers(gate)) {
+                    blockers.add(blocker);
+                    refusing.add(gate);
+                }
             }
-            if (job.writesFlash()) {
-                blockers.addAll(flashBlockers());
-            }
-            return new GateReport(job.id(), blockers);
+            return new GateReport(job.id(), blockers, refusing);
         }
 
-        private List<String> deviceBlockers() {
-            List<String> blockers = new ArrayList<>();
-            DeviceSpec fitted = board.device();
-            if (!record.device().equals(fitted.device())) {
-                blockers.add("the image is for " + record.device() + " and the board carries " + fitted.device());
-            }
-            if (!job.writesFlash() && record.length() > fitted.configBytes()) {
-                blockers.add("the image is longer than this device's configuration");
-            }
-            return blockers;
-        }
-
-        /** What stands between this image and the configuration flash on this board. */
-        private List<String> flashBlockers() {
-            List<String> blockers = new ArrayList<>();
+        /** What one gate has to say about the job; nothing when it passes. */
+        private List<String> blockers(Gate gate) {
             FlashSpec flash = board.flashSpec();
-            if (record.isPartial()) {
-                blockers.add("a partial image cannot be written to flash");
-            }
-            if (record.length() > flash.capacityBytes()) {
-                blockers.add("the image is bigger than the flash on this board");
-            }
-            if (requireTiming && timingClosed.isEmpty()) {
-                blockers.add("no timing report has been read for this image");
-            } else if (requireTiming && !timingClosed.get()) {
-                blockers.add("the design did not close timing");
-            }
-            if (job.touchesGolden() && wear.isPresent() && wear.get().isWorn(board.tag(), flash)) {
-                blockers.add("the flash on this board is near the end of its erase life");
-            }
-            SpiRead read = options.effectiveRead();
-            if (read.needsQuad() && !flash.quadCapable()) {
-                blockers.add(
-                        "the image reads its flash four bits wide and the " + flash.name() + " on this board cannot");
-            }
-            FlashLayout layout = FlashLayout.halves(flash);
-            FlashRegion target = layout.region(job.mode().region().orElseThrow());
-            blockers.addAll(jumpBlockers(layout));
-            if (!read.reaches(Math.min(target.start() + record.length(), target.end()) - 1)) {
-                blockers.add("the " + target.name() + " region runs past 16 MiB and the image reads with three"
-                        + " address bytes");
-            }
-            Optional<AdapterUnit> adapter = board.adapter();
-            if (adapter.isEmpty()) {
-                blockers.add("no cable is on that board");
-            } else if (!adapter.get().spec().canProgramFlash()) {
-                blockers.add("the " + adapter.get().model() + " on this board cannot write flash");
-            }
-            return blockers;
+            Optional<String> found =
+                    switch (gate) {
+                        case LEASE ->
+                            lease.isEmpty()
+                                    ? Optional.of("nobody holds a lease on that board")
+                                    : when(
+                                            !lease.get().holder().equals(job.requestedBy()),
+                                            "the board is leased to "
+                                                    + lease.get().holder());
+                        case STATE ->
+                            when(
+                                    state.state() != BoardStatus.LEASED && state.state() != BoardStatus.PROGRAMMING,
+                                    "the board is " + state.state().value());
+                        case DEVICE ->
+                            when(
+                                    !record.device().equals(board.device().device()),
+                                    "the image is for " + record.device() + " and the board carries "
+                                            + board.device().device());
+                        case CONFIGURATION ->
+                            when(
+                                    !job.writesFlash()
+                                            && record.length() > board.device().configBytes(),
+                                    "the image is longer than this device's configuration");
+                        case CHANNEL -> channelBlocker();
+                        case PARTIAL -> when(record.isPartial(), "a partial image cannot be written to flash");
+                        case CAPACITY ->
+                            when(
+                                    record.length() > flash.capacityBytes(),
+                                    "the image is bigger than the flash on this board");
+                        case TIMING ->
+                            !requireTiming
+                                    ? Optional.empty()
+                                    : timingClosed.isEmpty()
+                                            ? Optional.of("no timing report has been read for this image")
+                                            : when(!timingClosed.get(), "the design did not close timing");
+                        case WEAR ->
+                            when(
+                                    job.touchesGolden()
+                                            && wear.isPresent()
+                                            && wear.get().isWorn(board.tag(), flash),
+                                    "the flash on this board is near the end of its erase life");
+                        case BUS_WIDTH ->
+                            when(
+                                    options.effectiveRead().needsQuad() && !flash.quadCapable(),
+                                    "the image reads its flash four bits wide and the " + flash.name()
+                                            + " on this board cannot");
+                        case JUMP -> jumpBlocker(FlashLayout.halves(flash));
+                        case REACH -> reachBlocker(FlashLayout.halves(flash));
+                        case CABLE ->
+                            board.adapter().isEmpty()
+                                    ? Optional.of("no cable is on that board")
+                                    : when(
+                                            !board.adapter().get().spec().canProgramFlash(),
+                                            "the " + board.adapter().get().model()
+                                                    + " on this board cannot write flash");
+                    };
+            return found.stream().toList();
+        }
+
+        private Optional<String> channelBlocker() {
+            List<Channel> allowed = allowedChannels(job.mode());
+            String channels = allowed.stream().map(Channel::value).collect(Collectors.joining(" or "));
+            return when(
+                    allowed.stream().noneMatch(channel -> channel.value().equals(record.channel())),
+                    "a " + job.mode().value() + " write takes " + channels + " images and this one is in "
+                            + record.channel());
         }
 
         /**
          * A golden image that jumps has to jump to the update image, and an update image must not
          * jump at all: it would restart configuration from wherever it points every time it loaded.
          */
-        private List<String> jumpBlockers(FlashLayout layout) {
+        private Optional<String> jumpBlocker(FlashLayout layout) {
             if (options.jumpsTo().isEmpty()) {
-                return List.of();
+                return Optional.empty();
             }
             long jump = options.jumpsTo().getAsLong();
             long update = layout.region("update").start();
             if (!job.touchesGolden()) {
-                return List.of(String.format(
+                return Optional.of(String.format(
                         Locale.ROOT, "an update image that jumps to 0x%08x would never stay loaded", jump));
             }
-            if (jump != update) {
-                return List.of(String.format(
-                        Locale.ROOT,
-                        "the golden image jumps to 0x%08x and the update image starts at 0x%08x",
-                        jump,
-                        update));
-            }
-            return List.of();
+            return when(
+                    jump != update,
+                    String.format(
+                            Locale.ROOT,
+                            "the golden image jumps to 0x%08x and the update image starts at 0x%08x",
+                            jump,
+                            update));
         }
 
-        private List<String> leaseBlockers() {
-            List<String> blockers = new ArrayList<>();
-            if (lease.isEmpty()) {
-                blockers.add("nobody holds a lease on that board");
-            } else if (!lease.get().holder().equals(job.requestedBy())) {
-                blockers.add("the board is leased to " + lease.get().holder());
-            }
-            if (state.state() != BoardStatus.LEASED && state.state() != BoardStatus.PROGRAMMING) {
-                blockers.add("the board is " + state.state().value());
-            }
-            return blockers;
+        /** Only the stretch of the region the image covers has to be within the read's reach. */
+        private Optional<String> reachBlocker(FlashLayout layout) {
+            FlashRegion target = layout.region(job.mode().region().orElseThrow());
+            long last = Math.min(target.start() + record.length(), target.end()) - 1;
+            return when(
+                    !options.effectiveRead().reaches(last),
+                    "the " + target.name() + " region runs past 16 MiB and the image reads with three address bytes");
+        }
+
+        private static Optional<String> when(boolean refused, String reason) {
+            return refused ? Optional.of(reason) : Optional.empty();
         }
     }
 }

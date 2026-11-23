@@ -2,6 +2,7 @@ package io.github.rkaushikdev.carrierworks.jobs;
 
 import static io.github.rkaushikdev.carrierworks.Measure.mib;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactKind;
 import io.github.rkaushikdev.carrierworks.artifacts.ArtifactRecord;
@@ -19,6 +20,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -446,5 +448,47 @@ class GatesTest {
                 .report();
         assertThat(report.blockers()).hasSizeGreaterThanOrEqualTo(5);
         assertThat(report.describe()).startsWith("job-00001 refused: ");
+    }
+
+    @Test
+    void everyBlockerNamesTheGateBehindIt() {
+        GateReport report = check(
+                        job(JobMode.FLASH_GOLDEN),
+                        record("xc7a100t", LENGTH, ArtifactKind.PARTIAL).withChannel("dev"))
+                .lease(Optional.empty())
+                .timingClosed(false)
+                .report();
+        assertThat(report.gates()).hasSameSizeAs(report.blockers());
+        assertThat(report.refusedBy())
+                .containsExactly(Gate.LEASE, Gate.DEVICE, Gate.CHANNEL, Gate.PARTIAL, Gate.TIMING);
+        assertThat(report.blockers().get(report.gates().indexOf(Gate.TIMING)))
+                .isEqualTo("the design did not close timing");
+    }
+
+    @Test
+    void aGateThatFindsTwoThingsIsNamedOnce() {
+        GateReport report = check(job(), board(), record(), new BoardState(BoardStatus.FAULTED, NOW, "chain"))
+                .lease(lease("team-b"))
+                .report();
+        assertThat(report.blockers()).containsExactly("the board is leased to team-b", "the board is faulted");
+        assertThat(report.refusedBy()).containsExactly(Gate.LEASE, Gate.STATE);
+    }
+
+    @Test
+    void flashGatesDoNotRunForAJtagLoad() {
+        GateReport report = check(job(), oneBitFlash())
+                .options(reading(SpiRead.QUAD_READ))
+                .timingClosed(false)
+                .report();
+        assertThat(report.allowed()).isTrue();
+        assertThat(report.refusedBy()).isEmpty();
+        assertThat(Arrays.stream(Gate.values()).filter(Gate::flashOnly).map(Gate::value))
+                .containsExactly("partial", "capacity", "timing", "wear", "bus-width", "jump", "reach", "cable");
+    }
+
+    @Test
+    void aReportWhoseGatesDoNotLineUpIsABug() {
+        assertThatThrownBy(() -> new GateReport("job-00001", List.of("no"), List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }
