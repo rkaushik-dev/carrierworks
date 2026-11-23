@@ -59,6 +59,34 @@ class AlarmsTest {
     }
 
     @Test
+    void aCoolBoardHeatingFastIsWarnedAboutBeforeItCrossesTheLine() {
+        ThermalStatus status = book().update("bx-14", logAt("bx-14", 50_000, 54_000, 58_000, 62_000, 66_000), NOW);
+        assertThat(status.state()).isEqualTo(ThermalState.WARN);
+        assertThat(status.millidegrees()).hasValue(60_000);
+    }
+
+    @Test
+    void aCoolBoardWarmingSlowlyStaysNormal() {
+        ThermalStatus status = book().update("bx-14", logAt("bx-14", 50_000, 51_000, 52_000, 53_000), NOW);
+        assertThat(status.state()).isEqualTo(ThermalState.NORMAL);
+    }
+
+    @Test
+    void theRiseLimitCanBeSetPerBook() {
+        AlarmBook strict = new AlarmBook(limits(), AlarmBook.DEFAULT_WINDOW, AlarmBook.DEFAULT_STALE_AFTER, 2_000);
+        assertThat(strict.riseLimitMc()).isEqualTo(2_000);
+        assertThat(book().riseLimitMc()).isEqualTo(AlarmBook.DEFAULT_RISE_LIMIT_MC);
+        ThermalStatus status = strict.update("bx-14", logAt("bx-14", 50_000, 51_000, 52_000, 53_000), NOW);
+        assertThat(status.state()).isEqualTo(ThermalState.WARN);
+    }
+
+    @Test
+    void aRiseLimitThatIsNotARateIsRefused() {
+        assertThatThrownBy(() -> new AlarmBook(limits(), AlarmBook.DEFAULT_WINDOW, AlarmBook.DEFAULT_STALE_AFTER, 0))
+                .isInstanceOf(ValidationError.class);
+    }
+
+    @Test
     void aHotBoardWarns() {
         ThermalStatus status = book().update("bx-14", logAt("bx-14", 77_000, 78_000), NOW);
         assertThat(status.state()).isEqualTo(ThermalState.WARN);

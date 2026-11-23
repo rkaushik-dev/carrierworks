@@ -138,14 +138,40 @@ public final class ThermalLog {
      * heating die look as if it were cooling.
      */
     public Optional<Boolean> rising(String board, Instant now, Duration length) {
+        return risePerMinute(board, now, length).stream()
+                .mapToObj(rate -> rate > 0)
+                .findFirst();
+    }
+
+    /**
+     * How fast the board is heating, in millidegrees a minute, as the least squares slope through
+     * the readings of the sensor the board is judged on; negative when it is cooling.
+     *
+     * <p>Nothing when that sensor has fewer than four readings in the window, or they were all
+     * taken at the same moment.
+     */
+    public OptionalInt risePerMinute(String board, Instant now, Duration length) {
         List<ThermalSample> inside = hottestSensor(board, now, length);
         if (inside.size() < TREND_MINIMUM) {
-            return Optional.empty();
+            return OptionalInt.empty();
         }
-        int middle = inside.size() / 2;
-        double first = (double) total(inside.subList(0, middle)) / middle;
-        double second = (double) total(inside.subList(middle, inside.size())) / (inside.size() - middle);
-        return Optional.of(second > first);
+        Instant first = inside.getFirst().at();
+        double meanSeconds = inside.stream()
+                .mapToDouble(sample -> seconds(first, sample))
+                .average()
+                .orElseThrow();
+        double meanReading = (double) total(inside) / inside.size();
+        double across = 0;
+        double spread = 0;
+        for (ThermalSample sample : inside) {
+            double dx = seconds(first, sample) - meanSeconds;
+            across += dx * (sample.millidegrees() - meanReading);
+            spread += dx * dx;
+        }
+        if (spread == 0) {
+            return OptionalInt.empty();
+        }
+        return OptionalInt.of((int) Numbers.round(across / spread * 60));
     }
 
     /** Drop everything older than a moment, returning how many went. */
@@ -171,6 +197,10 @@ public final class ThermalLog {
     private static Map<String, List<ThermalSample>> bySource(List<ThermalSample> readings) {
         return readings.stream()
                 .collect(Collectors.groupingBy(ThermalSample::source, TreeMap::new, Collectors.toList()));
+    }
+
+    private static double seconds(Instant from, ThermalSample sample) {
+        return Duration.between(from, sample.at()).toMillis() / 1000.0;
     }
 
     private static long total(List<ThermalSample> readings) {

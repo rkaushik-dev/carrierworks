@@ -169,6 +169,30 @@ class ThermalSamplesTest {
     }
 
     @Test
+    void theRateOfRiseIsTheSlopeThroughTheReadings() {
+        ThermalLog log = logWith(60_000, 61_000, 62_000, 63_000);
+        assertThat(log.risePerMinute("bx-14", NOW, FIVE_MINUTES)).hasValue(3_000);
+        ThermalLog cooling = logWith(MINUTE, 70_000, 68_000, 66_000, 64_000);
+        assertThat(cooling.risePerMinute("bx-14", NOW, Duration.ofMinutes(10))).hasValue(-2_000);
+    }
+
+    @Test
+    void aNoisyReadingMovesTheSlopeLessThanItMovesTheEnds() {
+        ThermalLog log = logWith(MINUTE, 60_000, 60_000, 60_000, 60_000, 64_000);
+        assertThat(log.risePerMinute("bx-14", NOW, Duration.ofMinutes(10))).hasValue(800);
+    }
+
+    @Test
+    void readingsAllTakenAtOnceHaveNoSlope() {
+        ThermalLog log = new ThermalLog();
+        for (int value : new int[] {60_000, 61_000, 62_000, 63_000}) {
+            log.add("bx-14", NOW, value);
+        }
+        assertThat(log.risePerMinute("bx-14", NOW, FIVE_MINUTES)).isEmpty();
+        assertThat(log.rising("bx-14", NOW, FIVE_MINUTES)).isEmpty();
+    }
+
+    @Test
     void aTrendNeedsEnoughSamplesToMeanAnything() {
         ThermalLog log = logWith(60_000, 70_000);
         assertThat(log.rising("bx-14", NOW, FIVE_MINUTES)).isEmpty();

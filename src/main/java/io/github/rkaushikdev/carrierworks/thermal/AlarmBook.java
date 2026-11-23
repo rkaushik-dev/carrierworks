@@ -33,12 +33,22 @@ public final class AlarmBook {
     /** How long a board may go unheard before it is unknown, unless the book is told otherwise. */
     public static final Duration DEFAULT_STALE_AFTER = Duration.ofMinutes(3);
 
+    /**
+     * How fast a die may heat, in millidegrees a minute, before a board still under its warning
+     * line is warned about anyway, unless the book is told otherwise.
+     */
+    public static final int DEFAULT_RISE_LIMIT_MC = 10_000;
+
+    /** How much history the rate of rise is read over: enough polls for a slope to mean something. */
+    public static final Duration TREND_WINDOW = Duration.ofMinutes(3);
+
     private static final Comparator<ThermalStatus> WORST_FIRST =
             Comparator.comparingInt(ThermalStatus::rank).reversed().thenComparing(ThermalStatus::board);
 
     private final ThermalLimits limits;
     private final Duration window;
     private final Duration staleAfter;
+    private final int riseLimitMc;
     private final Map<String, ThermalStatus> statuses = new TreeMap<>();
 
     /** A book deciding on the last minute of readings and calling a board unknown after three. */
@@ -48,12 +58,33 @@ public final class AlarmBook {
 
     /** A book deciding on {@code window} of readings and calling a board unknown after {@code staleAfter}. */
     public AlarmBook(ThermalLimits limits, Duration window, Duration staleAfter) {
+        this(limits, window, staleAfter, DEFAULT_RISE_LIMIT_MC);
+    }
+
+    /**
+     * A book that also warns about a cool board heating faster than {@code riseLimitMc}
+     * millidegrees a minute.
+     *
+     * <p>A die that climbs ten degrees a minute from fifty reaches shutdown in four, and the poll
+     * after it crosses the warning line is too late to do anything gentle about it. A stalled fan
+     * or a heatsink that has come unclipped looks exactly like that.
+     */
+    public AlarmBook(ThermalLimits limits, Duration window, Duration staleAfter, int riseLimitMc) {
         if (!window.isPositive() || !staleAfter.isPositive()) {
             throw new ValidationError("both windows have some length", "alarms");
+        }
+        if (riseLimitMc <= 0) {
+            throw new ValidationError("a rise limit is a positive rate", "rise_limit_mc");
         }
         this.limits = limits;
         this.window = window;
         this.staleAfter = staleAfter;
+        this.riseLimitMc = riseLimitMc;
+    }
+
+    /** How fast a cool board may heat, in millidegrees a minute, before it is warned about. */
+    public int riseLimitMc() {
+        return riseLimitMc;
     }
 
     /** The thresholds every board is judged against. */
@@ -81,35 +112,46 @@ public final class AlarmBook {
      *
      * <p>A stale board goes to unknown, keeping the time it first went quiet. Otherwise the average
      * over the window moves the board along the escalation with the hysteresis applied, starting
-     * from normal when the board was unknown or new. The since time only moves when the state does.
+     * from normal when the board was unknown or new. A board that would be normal is warned about
+     * when its die is heating faster than the rise limit. The since time only moves when the state
+     * does.
      */
     public ThermalStatus update(String board, ThermalLog log, Instant now) {
         String tag = Records.boardKey(board);
         Optional<ThermalStatus> held = Optional.ofNullable(statuses.get(tag));
-        ThermalStatus status;
-        if (log.stale(tag, now, staleAfter)) {
-            Instant since = held.filter(previous -> previous.state() == ThermalState.UNKNOWN)
-                    .map(ThermalStatus::since)
-                    .orElse(now);
-            OptionalInt last = log.latest(tag)
-                    .map(sample -> OptionalInt.of(sample.millidegrees()))
-                    .orElse(OptionalInt.empty());
-            status = new ThermalStatus(tag, ThermalState.UNKNOWN, since, last, true);
-        } else {
-            // The newest reading can be fresh and still fall outside the window; it stands in then.
-            int reading = log.average(tag, now, window)
-                    .orElseGet(() -> log.latest(tag).orElseThrow().millidegrees());
-            ThermalState previous = held.map(ThermalStatus::state)
-                    .filter(state -> state != ThermalState.UNKNOWN)
-                    .orElse(ThermalState.NORMAL);
-            ThermalState state = limits.nextState(previous, reading);
-            Instant since = held.filter(prior -> prior.state() == state)
-                    .map(ThermalStatus::since)
-                    .orElse(now);
-            status = new ThermalStatus(tag, state, since, OptionalInt.of(reading), false);
-        }
+        ThermalStatus status =
+                log.stale(tag, now, staleAfter) ? unheard(tag, held, log, now) : judged(tag, held, log, now);
         statuses.put(tag, status);
         return status;
+    }
+
+    private static ThermalStatus unheard(String tag, Optional<ThermalStatus> held, ThermalLog log, Instant now) {
+        OptionalInt last = log.latest(tag)
+                .map(sample -> OptionalInt.of(sample.millidegrees()))
+                .orElse(OptionalInt.empty());
+        return new ThermalStatus(tag, ThermalState.UNKNOWN, since(held, ThermalState.UNKNOWN, now), last, true);
+    }
+
+    private ThermalStatus judged(String tag, Optional<ThermalStatus> held, ThermalLog log, Instant now) {
+        // The newest reading can be fresh and still fall outside the window; it stands in then.
+        int reading = log.average(tag, now, window)
+                .orElseGet(() -> log.latest(tag).orElseThrow().millidegrees());
+        ThermalState previous = held.map(ThermalStatus::state)
+                .filter(state -> state != ThermalState.UNKNOWN)
+                .orElse(ThermalState.NORMAL);
+        ThermalState state = limits.nextState(previous, reading);
+        if (state == ThermalState.NORMAL
+                && log.risePerMinute(tag, now, TREND_WINDOW).orElse(0) > riseLimitMc) {
+            state = ThermalState.WARN;
+        }
+        return new ThermalStatus(tag, state, since(held, state, now), OptionalInt.of(reading), false);
+    }
+
+    /** When the board entered a state: kept from before if it was already there, otherwise now. */
+    private static Instant since(Optional<ThermalStatus> held, ThermalState state, Instant now) {
+        return held.filter(prior -> prior.state() == state)
+                .map(ThermalStatus::since)
+                .orElse(now);
     }
 
     /** Update every board the log knows about, and hand back every status, worst first. */
