@@ -23,6 +23,9 @@ import java.util.Optional;
  * because otherwise the registry fills up with duplicates and nobody can tell which one is on the
  * board.
  *
+ * <p>An image whose own crc writes disagree with its stream is refused as it is read. The device
+ * would refuse it too, but only after somebody had booked a board and loaded it.
+ *
  * <p>The kind of image matters as much as its contents. A full image configures the whole device
  * and ends by starting it. A partial one rewrites some frames while the device carries on running,
  * and loading it into a device that is not already configured does nothing useful. They are told
@@ -52,6 +55,13 @@ public record Bitstream(BitFile header, List<ConfigPacket> packets, String diges
             throw new ValidationError("that bit file carries no image", "bitstream", Details.of("source", source));
         }
         byte[] body = header.data();
+        PacketCrc crc = PacketCrc.check(body);
+        if (crc.failed() > 0) {
+            throw new ValidationError(
+                    "the image fails its own crc check",
+                    "bitstream",
+                    Details.of("source", source, "mismatch", crc.firstMismatch().orElse("")));
+        }
         return new Bitstream(header, Packets.parse(body), Digests.sha256(body), source);
     }
 
@@ -95,6 +105,11 @@ public record Bitstream(BitFile header, List<ConfigPacket> packets, String diges
     /** A partial image never starts the device; it assumes it is running. */
     public boolean isPartial() {
         return !commands().contains("start");
+    }
+
+    /** The device's own crc check, run over the configuration data. */
+    public PacketCrc crc() {
+        return PacketCrc.check(header.data());
     }
 
     /** The configuration options the image sets on the device. */

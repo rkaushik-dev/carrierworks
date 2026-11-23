@@ -172,41 +172,52 @@ public final class Packets {
      * stream survives.
      */
     public static List<ConfigPacket> parse(byte[] data, int limit) {
-        int offset = findSync(data);
         List<ConfigPacket> packets = new ArrayList<>();
+        walk(
+                data,
+                (kind, opcode, register, offset, count) -> packets.add(new ConfigPacket(
+                        kind, opcode, register, count <= limit ? words(data, offset, count) : List.<Long>of())));
+        return List.copyOf(packets);
+    }
+
+    /** What the walk hands over for each packet: its header, and where its payload sits. */
+    @FunctionalInterface
+    interface Visitor {
+        void packet(int kind, Opcode opcode, Optional<Integer> register, int offset, int count);
+    }
+
+    /**
+     * Go through the packet stream header by header without copying any payload, which is what a
+     * pass over every frame word needs.
+     */
+    static void walk(byte[] data, Visitor visitor) {
+        int offset = findSync(data);
         Optional<Integer> lastRegister = Optional.empty();
         while (offset + 4L <= data.length) {
             long header = wordAt(data, offset);
             offset += 4;
-            long kind = header >>> 29;
-            Opcode opcode = Opcode.of((int) ((header >>> 27) & 0b11));
-            Optional<Integer> register;
-            int count;
-            if (kind == 0b001) {
-                register = Optional.of((int) ((header >>> 13) & 0x3FFF));
-                count = (int) (header & 0x7FF);
-                lastRegister = register;
-            } else if (kind == 0b010) {
-                register = lastRegister;
-                count = (int) (header & 0x7FF_FFFF);
-            } else if (header == MAX_WORD) {
-                break;
-            } else {
+            int kind = (int) (header >>> 29);
+            if (kind != 0b001 && kind != 0b010) {
+                if (header == MAX_WORD) {
+                    return;
+                }
                 throw new ValidationError(
                         "unknown packet type in the stream",
                         "bitstream",
                         Details.of("header", String.format(Locale.ROOT, "0x%08x", header)));
             }
-            long payloadBytes = count * 4L;
-            if (offset + payloadBytes > data.length) {
+            Opcode opcode = Opcode.of((int) ((header >>> 27) & 0b11));
+            if (kind == 0b001) {
+                lastRegister = Optional.of((int) ((header >>> 13) & 0x3FFF));
+            }
+            int count = (int) (header & (kind == 0b001 ? 0x7FF : 0x7FF_FFFF));
+            if (offset + count * 4L > data.length) {
                 throw new ValidationError(
                         "a packet ran off the end of the image", "bitstream", Details.of("wanted", count));
             }
-            List<Long> words = count <= limit ? words(data, offset, count) : List.of();
-            offset += (int) payloadBytes;
-            packets.add(new ConfigPacket(kind == 0b001 ? 1 : 2, opcode, register, words));
+            visitor.packet(kind, opcode, lastRegister, offset, count);
+            offset += count * 4;
         }
-        return List.copyOf(packets);
     }
 
     /**
